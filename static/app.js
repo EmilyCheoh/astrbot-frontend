@@ -12,14 +12,19 @@
   const sendBtn     = document.getElementById("send-btn");
 
   let ws = null;
+  let savedToken = null;
+  let reconnectDelay = 1000;
+  let reconnecting = false;
 
-  // ---- Login ----
+  // ---- Connect ----
   function connect(token) {
+    savedToken = token;
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     ws = new WebSocket(`${proto}//${location.host}/ws`);
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "auth", token }));
+      ws.send(JSON.stringify({ type: "auth", token: savedToken }));
+      reconnectDelay = 1000; // reset on successful connect
     };
 
     ws.onmessage = (evt) => {
@@ -28,12 +33,28 @@
     };
 
     ws.onclose = () => {
-      appendSystem("Connection closed. Refresh to reconnect.");
+      if (savedToken && !reconnecting) {
+        scheduleReconnect();
+      }
     };
 
     ws.onerror = () => {
-      appendSystem("Connection error.");
+      // onclose will fire after this, reconnect handled there
     };
+  }
+
+  // ---- Auto-reconnect ----
+  function scheduleReconnect() {
+    reconnecting = true;
+    statusBar.textContent = "reconnecting...";
+    statusBar.classList.remove("hidden");
+
+    setTimeout(() => {
+      reconnecting = false;
+      connect(savedToken);
+      // cap delay at 15 seconds
+      reconnectDelay = Math.min(reconnectDelay * 1.5, 15000);
+    }, reconnectDelay);
   }
 
   // ---- Handle incoming messages ----
@@ -42,19 +63,21 @@
       case "auth_ok":
         loginDiv.classList.add("hidden");
         chatDiv.classList.remove("hidden");
+        statusBar.classList.add("hidden");
         msgInput.focus();
         break;
 
       case "error":
         alert(data.message || "Authentication failed");
+        savedToken = null; // don't reconnect with a bad token
         break;
 
       case "message_ack":
-        // Message received by server, nothing to do
         break;
 
       case "status":
         if (data.status === "thinking") {
+          statusBar.textContent = "thinking...";
           statusBar.classList.remove("hidden");
         } else {
           statusBar.classList.add("hidden");
@@ -98,16 +121,6 @@
       }
     }
 
-    messagesDiv.appendChild(div);
-    scrollToBottom();
-  }
-
-  function appendSystem(text) {
-    const div = document.createElement("div");
-    div.className = "msg bot";
-    div.style.color = "#999";
-    div.style.fontStyle = "italic";
-    div.textContent = text;
     messagesDiv.appendChild(div);
     scrollToBottom();
   }
