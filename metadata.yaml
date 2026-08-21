@@ -1,0 +1,6 @@
+name: astrbot_plugin_af_frontend
+display_name: "A&F Web Frontend"
+desc: WebSocket platform adapter with a dedicated web frontend — our own entry point, independent of QQ.
+version: v0.1.0
+author: Abyss AI & Felis Abyssalis
+repo: ""
