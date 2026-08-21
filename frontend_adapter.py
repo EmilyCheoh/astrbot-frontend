@@ -54,7 +54,7 @@ class FrontendAdapter(Platform):
     # -- Required overrides --------------------------------------------------
 
     def meta(self) -> PlatformMetadata:
-        return PlatformMetadata("abyss_web", "A&F Web Frontend")
+        return PlatformMetadata("abyss_web", "A&F Web Frontend", self.config.get("id", "abyss_web"))
 
     async def run(self):
         """Start the WebSocket (+ static file) server."""
