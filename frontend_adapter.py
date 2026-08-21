@@ -25,7 +25,6 @@ from astrbot.api.platform import (
 )
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Plain, Image, Record
-from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot import logger
 
 from .frontend_event import FrontendEvent
@@ -46,15 +45,8 @@ from .frontend_event import FrontendEvent
 class FrontendAdapter(Platform):
     """WebSocket-based platform adapter."""
 
-    def __init__(
-        self,
-        platform_config: dict,
-        platform_settings: dict,
-        event_queue: asyncio.Queue,
-    ) -> None:
-        super().__init__(event_queue)
-        self.config = platform_config
-        self.settings = platform_settings
+    def __init__(self, config: dict, event_queue: asyncio.Queue) -> None:
+        super().__init__(config, event_queue)
         # Currently active WebSocket connection (single-user)
         self._active_ws: web.WebSocketResponse | None = None
         self._static_dir = Path(__file__).parent / "static"
@@ -89,7 +81,7 @@ class FrontendAdapter(Platform):
             await runner.cleanup()
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session, message_chain: MessageChain
     ):
         """Active push — used by context.send_message()."""
         ws = self._active_ws
