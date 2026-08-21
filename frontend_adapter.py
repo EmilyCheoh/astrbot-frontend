@@ -45,7 +45,7 @@ from .frontend_event import FrontendEvent
 class FrontendAdapter(Platform):
     """WebSocket-based platform adapter."""
 
-    def __init__(self, config: dict, event_queue: asyncio.Queue) -> None:
+    def __init__(self, config: dict, platform_settings: dict, event_queue: asyncio.Queue) -> None:
         super().__init__(config, event_queue)
         # Currently active WebSocket connection (single-user)
         self._active_ws: web.WebSocketResponse | None = None
