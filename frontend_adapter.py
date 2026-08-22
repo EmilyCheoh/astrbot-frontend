@@ -154,10 +154,27 @@ class FrontendAdapter(Platform):
 
     # -- History loading -------------------------------------------------------
 
+    def _find_db(self) -> str | None:
+        """Locate AstrBot's SQLite database (path differs host vs container)."""
+        candidates = [
+            Path.cwd() / "data" / "data_v4.db",
+            Path("/AstrBot/data/data_v4.db"),
+            Path("/opt/astrbot/data/data_v4.db"),
+            Path("/app/data/data_v4.db"),
+        ]
+        for p in candidates:
+            if p.is_file():
+                return str(p)
+        return None
+
     async def _send_history(self, ws: web.WebSocketResponse):
         """Load recent conversation history from the DB and send to client."""
         try:
-            db_path = "/opt/astrbot/data/data_v4.db"
+            db_path = self._find_db()
+            if not db_path:
+                logger.warning("Chat history DB not found, tried common paths")
+                return
+
             platform_id = self.config.get("id", "abyss_web")
 
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)

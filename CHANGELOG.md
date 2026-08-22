@@ -1,3 +1,5 @@
+Now show chat history
+
 Aug 22 - V2
 
 + 锁屏后自动重连
