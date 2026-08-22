@@ -185,7 +185,65 @@
         thinkingIndicator.classList.add("hidden");
         appendBot(data.segments || []);
         break;
+
+      case "history":
+        renderHistory(data.messages || []);
+        break;
     }
+  }
+
+  // ==================================================================
+  // Render conversation history from DB
+  // ==================================================================
+
+  const TIMESTAMP_TAG_RE = /<(?:current_)?date_and_time>[\s\S]*?<\/(?:current_)?date_and_time>\s*$/;
+
+  function renderHistory(messages) {
+    for (const msg of messages) {
+      const role = msg.role || "system";
+      if (role === "tool" || role === "system") continue;
+
+      let text = "";
+      let thinkText = "";
+
+      if (Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.type === "thinking" || block.type === "think") {
+            thinkText += (block.think || block.text || block.content || "") + "\n";
+          } else if (block.type === "text") {
+            text += block.text || block.content || "";
+          } else if (typeof block === "string") {
+            text += block;
+          } else {
+            text += block.text || block.content || JSON.stringify(block);
+          }
+        }
+      } else {
+        text = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+      }
+
+      // Strip AstrBot timestamp injection from user messages
+      text = text.replace(TIMESTAMP_TAG_RE, "").trim();
+
+      if (!text && !thinkText.trim()) continue;
+
+      if (role === "user") {
+        appendUser(text);
+      } else if (role === "assistant") {
+        const segments = [];
+        if (thinkText.trim()) {
+          segments.push({ type: "reasoning", data: thinkText.trim() });
+        }
+        if (text) {
+          segments.push({ type: "text", data: text });
+        }
+        if (segments.length > 0) {
+          appendBot(segments);
+        }
+      }
+    }
+
+    scrollToBottom();
   }
 
   // ==================================================================

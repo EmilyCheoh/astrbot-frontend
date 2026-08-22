@@ -9,6 +9,7 @@ import base64
 import json
 import mimetypes
 import os
+import sqlite3
 import uuid
 from pathlib import Path
 
@@ -122,6 +123,7 @@ class FrontendAdapter(Platform):
                             authenticated = True
                             self._active_ws = ws
                             await ws.send_json({"type": "auth_ok"})
+                            await self._send_history(ws)
                             logger.info("Web frontend client authenticated.")
                         else:
                             await ws.send_json(
@@ -149,6 +151,32 @@ class FrontendAdapter(Platform):
             logger.info("Web frontend client disconnected.")
 
         return ws
+
+    # -- History loading -------------------------------------------------------
+
+    async def _send_history(self, ws: web.WebSocketResponse):
+        """Load recent conversation history from the DB and send to client."""
+        try:
+            db_path = "/opt/astrbot/data/data_v4.db"
+            platform_id = self.config.get("id", "abyss_web")
+
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            cursor = conn.execute(
+                "SELECT content FROM conversations "
+                "WHERE platform_id = ? ORDER BY updated_at DESC LIMIT 1",
+                (platform_id,),
+            )
+            row = cursor.fetchone()
+            conn.close()
+
+            if row and row[0]:
+                messages = json.loads(row[0])
+                await ws.send_json({
+                    "type": "history",
+                    "messages": messages[-50:],
+                })
+        except Exception as exc:
+            logger.warning(f"Failed to load chat history: {exc}")
 
     # -- Message handling ----------------------------------------------------
 
