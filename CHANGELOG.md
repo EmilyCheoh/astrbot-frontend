@@ -1,4 +1,4 @@
-v3
+v3 - debugging
 
 Now show chat history - done
 

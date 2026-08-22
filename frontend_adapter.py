@@ -29,6 +29,7 @@ from astrbot.api.message_components import Node, Plain, Image, Record
 from astrbot import logger
 
 from .frontend_event import FrontendEvent
+from . import runtime
 
 
 # ---------------------------------------------------------------------------
@@ -51,8 +52,7 @@ class FrontendAdapter(Platform):
         # Currently active WebSocket connection (single-user)
         self._active_ws: web.WebSocketResponse | None = None
         self._static_dir = Path(__file__).parent / "static"
-        # Injected by Main.on_loaded after AstrBot finishes initialising
-        self.conversation_manager = None
+        # conversation_manager is accessed via runtime module (set by Main)
 
     # -- Required overrides --------------------------------------------------
 
@@ -253,8 +253,8 @@ class FrontendAdapter(Platform):
 
             # Determine which conversation is currently active
             active_cid = None
-            if self.conversation_manager:
-                active_cid = await self.conversation_manager.get_curr_conversation_id(
+            if runtime.conversation_manager:
+                active_cid = await runtime.conversation_manager.get_curr_conversation_id(
                     self._umo
                 )
 
@@ -296,11 +296,11 @@ class FrontendAdapter(Platform):
     async def _handle_switch(self, ws: web.WebSocketResponse, conversation_id: str):
         """Switch the active conversation pointer and send its history."""
         try:
-            if not self.conversation_manager:
+            if not runtime.conversation_manager:
                 logger.warning("Conversation manager not available yet")
                 return
 
-            await self.conversation_manager.switch_conversation(
+            await runtime.conversation_manager.switch_conversation(
                 self._umo, conversation_id,
             )
             await ws.send_json({
@@ -314,12 +314,12 @@ class FrontendAdapter(Platform):
     async def _handle_new(self, ws: web.WebSocketResponse):
         """Create a new conversation and switch to it."""
         try:
-            if not self.conversation_manager:
+            if not runtime.conversation_manager:
                 logger.warning("Conversation manager not available yet")
                 return
 
             platform_id = self.config.get("id", "abyss_web")
-            cid = await self.conversation_manager.new_conversation(
+            cid = await runtime.conversation_manager.new_conversation(
                 self._umo, platform_id,
             )
             await ws.send_json({
