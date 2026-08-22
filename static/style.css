@@ -455,29 +455,33 @@ body {
 
 .composer-row {
   display: flex;
-  align-items: flex-end;
-  gap: 6px;
+  align-items: center;
+  gap: 0;
+  width: 100%;
 }
 
 .attach-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 50%;
+  border-radius: 0;
   background: transparent;
   color: var(--text-muted);
-  font-size: 20px;
-  font-weight: 300;
+  font-size: 18px;
+  font-weight: 400;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  padding: 0;
+  margin-right: 10px;
+  border-right: 1px solid var(--border-subtle);
+  padding-right: 10px;
+  transition: color 0.15s;
 }
 
 .attach-btn:hover {
-  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
