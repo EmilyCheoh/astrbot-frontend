@@ -255,6 +255,7 @@ class FrontendAdapter(Platform):
             event.track_temporary_local_file(fp)
 
         self.commit_event(event)
+        logger.info(f"Den UMO: {event.unified_msg_origin}")
 
     # -- Serialisation helpers -----------------------------------------------
 
