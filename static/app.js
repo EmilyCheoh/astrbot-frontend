@@ -103,6 +103,11 @@
   const sendBtn           = document.getElementById("send-btn");
   const themeToggle       = document.getElementById("theme-toggle");
   const fontToggle        = document.getElementById("font-toggle");
+  const panelToggle       = document.getElementById("panel-toggle");
+  const panelOverlay      = document.getElementById("panel-overlay");
+  const convPanel         = document.getElementById("conv-panel");
+  const convList          = document.getElementById("conv-list");
+  const newConvBtn        = document.getElementById("new-conv-btn");
 
   let ws = null;
   let savedToken = null;
@@ -188,7 +193,21 @@
         break;
 
       case "history":
+        messagesDiv.innerHTML = "";
         renderHistory(data.messages || []);
+        break;
+
+      case "conversations_list":
+        renderConvList(data.conversations || []);
+        break;
+
+      case "conversation_switched":
+        closePanel();
+        break;
+
+      case "conversation_created":
+        messagesDiv.innerHTML = "";
+        closePanel();
         break;
     }
   }
@@ -338,6 +357,73 @@
   });
 
   // ==================================================================
+  // Conversation panel
+  // ==================================================================
+
+  function openPanel() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: "list_conversations" }));
+    convPanel.classList.add("open");
+    panelOverlay.classList.remove("hidden");
+    panelOverlay.classList.add("open");
+  }
+
+  function closePanel() {
+    convPanel.classList.remove("open");
+    panelOverlay.classList.remove("open");
+    // Wait for slide-out transition, then hide overlay
+    setTimeout(() => {
+      if (!convPanel.classList.contains("open")) {
+        panelOverlay.classList.add("hidden");
+      }
+    }, 260);
+  }
+
+  function renderConvList(conversations) {
+    convList.innerHTML = "";
+    for (const conv of conversations) {
+      const btn = document.createElement("button");
+      btn.className = "conv-item" + (conv.active ? " active" : "");
+
+      const preview = document.createElement("div");
+      preview.className = "conv-item-preview";
+      preview.textContent = conv.preview || "(empty)";
+
+      const time = document.createElement("div");
+      time.className = "conv-item-time";
+      time.textContent = formatTime(conv.updated_at);
+
+      btn.appendChild(preview);
+      btn.appendChild(time);
+
+      btn.addEventListener("click", () => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({
+          type: "switch_conversation",
+          conversation_id: conv.id,
+        }));
+      });
+
+      convList.appendChild(btn);
+    }
+  }
+
+  function formatTime(ts) {
+    if (!ts) return "";
+    try {
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return ts;
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mi = String(d.getMinutes()).padStart(2, "0");
+      return `${mm}-${dd} ${hh}:${mi}`;
+    } catch {
+      return ts;
+    }
+  }
+
+  // ==================================================================
   // Event listeners
   // ==================================================================
 
@@ -356,4 +442,11 @@
 
   themeToggle.addEventListener("click", cycleTheme);
   fontToggle.addEventListener("click", cycleFont);
+
+  panelToggle.addEventListener("click", openPanel);
+  panelOverlay.addEventListener("click", closePanel);
+  newConvBtn.addEventListener("click", () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: "new_conversation" }));
+  });
 })();

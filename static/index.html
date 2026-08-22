@@ -22,13 +22,22 @@
   <!-- Chat -->
   <div id="chat" class="hidden chat-layout">
     <header class="chat-header">
-      <div class="header-left"></div>
+      <div class="header-left">
+        <button id="panel-toggle" class="icon-btn" title="Conversations">&#9776;</button>
+      </div>
       <span class="header-title">Den</span>
       <div class="header-right">
         <button id="font-toggle" class="icon-btn" title="Font: serif">Aa</button>
         <button id="theme-toggle" class="icon-btn" title="Theme: auto"></button>
       </div>
     </header>
+
+    <!-- Slide-out conversation panel -->
+    <div id="panel-overlay" class="panel-overlay hidden"></div>
+    <aside id="conv-panel" class="conv-panel">
+      <button id="new-conv-btn" class="new-conv-btn">+ New conversation</button>
+      <div id="conv-list" class="conv-list"></div>
+    </aside>
 
     <main class="chat-scroll" id="chat-scroll">
       <div id="messages" class="chat-content"></div>

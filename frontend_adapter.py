@@ -51,11 +51,19 @@ class FrontendAdapter(Platform):
         # Currently active WebSocket connection (single-user)
         self._active_ws: web.WebSocketResponse | None = None
         self._static_dir = Path(__file__).parent / "static"
+        # Injected by Main.on_loaded after AstrBot finishes initialising
+        self.conversation_manager = None
 
     # -- Required overrides --------------------------------------------------
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata("abyss_web", "A&F Web Frontend", self.config.get("id", "abyss_web"))
+
+    @property
+    def _umo(self) -> str:
+        """Unified message origin for the Den session."""
+        pid = self.config.get("id", "abyss_web")
+        return f"{pid}:FriendMessage:felis_abyssalis"
 
     async def run(self):
         """Start the WebSocket (+ static file) server."""
@@ -136,6 +144,18 @@ class FrontendAdapter(Platform):
                     elif kind == "message" and authenticated:
                         await self._on_message(data, ws)
 
+                    # --- Conversation management ---------------------------
+                    elif kind == "list_conversations" and authenticated:
+                        await self._send_conversations_list(ws)
+
+                    elif kind == "switch_conversation" and authenticated:
+                        cid = data.get("conversation_id")
+                        if cid:
+                            await self._handle_switch(ws, cid)
+
+                    elif kind == "new_conversation" and authenticated:
+                        await self._handle_new(ws)
+
                     # --- Heartbeat -----------------------------------------
                     elif kind == "ping":
                         await ws.send_json({"type": "pong"})
@@ -167,8 +187,12 @@ class FrontendAdapter(Platform):
                 return str(p)
         return None
 
-    async def _send_history(self, ws: web.WebSocketResponse):
-        """Load recent conversation history from the DB and send to client."""
+    async def _send_history(self, ws: web.WebSocketResponse, conversation_id: str | None = None):
+        """Load conversation history from the DB and send to client.
+
+        If *conversation_id* is given, load that specific conversation.
+        Otherwise fall back to the most recently updated one.
+        """
         try:
             db_path = self._find_db()
             if not db_path:
@@ -178,11 +202,19 @@ class FrontendAdapter(Platform):
             platform_id = self.config.get("id", "abyss_web")
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
 
-            cursor = conn.execute(
-                "SELECT content FROM conversations "
-                "WHERE platform_id = ? ORDER BY updated_at DESC LIMIT 1",
-                (platform_id,),
-            )
+            if conversation_id:
+                cursor = conn.execute(
+                    "SELECT content FROM conversations "
+                    "WHERE conversation_id = ? AND platform_id = ?",
+                    (conversation_id, platform_id),
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT content FROM conversations "
+                    "WHERE platform_id = ? ORDER BY updated_at DESC LIMIT 1",
+                    (platform_id,),
+                )
+
             row = cursor.fetchone()
             conn.close()
 
@@ -193,9 +225,109 @@ class FrontendAdapter(Platform):
                     "messages": messages,
                 })
             else:
-                logger.info(f"History: no conversation found for {platform_id}")
+                # No history — send empty so frontend knows to clear
+                await ws.send_json({"type": "history", "messages": []})
         except Exception as exc:
             logger.warning(f"Failed to load chat history: {exc}")
+
+    # -- Conversation management -----------------------------------------------
+
+    async def _send_conversations_list(self, ws: web.WebSocketResponse):
+        """Send a list of all Den conversations to the frontend."""
+        try:
+            db_path = self._find_db()
+            if not db_path:
+                return
+
+            platform_id = self.config.get("id", "abyss_web")
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+
+            cursor = conn.execute(
+                "SELECT conversation_id, title, updated_at, content "
+                "FROM conversations WHERE platform_id = ? "
+                "ORDER BY updated_at DESC",
+                (platform_id,),
+            )
+            rows = cursor.fetchall()
+            conn.close()
+
+            # Determine which conversation is currently active
+            active_cid = None
+            if self.conversation_manager:
+                active_cid = await self.conversation_manager.get_curr_conversation_id(
+                    self._umo
+                )
+
+            conversations = []
+            for cid, title, updated_at, content in rows:
+                # Build a preview from the first user message if no title
+                preview = title or ""
+                if not preview and content:
+                    try:
+                        msgs = json.loads(content)
+                        for m in msgs:
+                            if m.get("role") == "user":
+                                c = m.get("content", "")
+                                if isinstance(c, list):
+                                    # Extract text from content blocks
+                                    c = "".join(
+                                        b.get("text", "") for b in c
+                                        if isinstance(b, dict) and b.get("type") == "text"
+                                    )
+                                preview = c[:40].strip()
+                                break
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                conversations.append({
+                    "id": cid,
+                    "preview": preview or "(empty)",
+                    "updated_at": updated_at,
+                    "active": cid == active_cid,
+                })
+
+            await ws.send_json({
+                "type": "conversations_list",
+                "conversations": conversations,
+            })
+        except Exception as exc:
+            logger.warning(f"Failed to list conversations: {exc}")
+
+    async def _handle_switch(self, ws: web.WebSocketResponse, conversation_id: str):
+        """Switch the active conversation pointer and send its history."""
+        try:
+            if not self.conversation_manager:
+                logger.warning("Conversation manager not available yet")
+                return
+
+            await self.conversation_manager.switch_conversation(
+                self._umo, conversation_id,
+            )
+            await ws.send_json({
+                "type": "conversation_switched",
+                "conversation_id": conversation_id,
+            })
+            await self._send_history(ws, conversation_id)
+        except Exception as exc:
+            logger.warning(f"Failed to switch conversation: {exc}")
+
+    async def _handle_new(self, ws: web.WebSocketResponse):
+        """Create a new conversation and switch to it."""
+        try:
+            if not self.conversation_manager:
+                logger.warning("Conversation manager not available yet")
+                return
+
+            platform_id = self.config.get("id", "abyss_web")
+            cid = await self.conversation_manager.new_conversation(
+                self._umo, platform_id,
+            )
+            await ws.send_json({
+                "type": "conversation_created",
+                "conversation_id": cid,
+            })
+        except Exception as exc:
+            logger.warning(f"Failed to create conversation: {exc}")
 
     # -- Message handling ----------------------------------------------------
 
@@ -255,7 +387,6 @@ class FrontendAdapter(Platform):
             event.track_temporary_local_file(fp)
 
         self.commit_event(event)
-        logger.info(f"Den UMO: {event.unified_msg_origin}")
 
     # -- Serialisation helpers -----------------------------------------------
 
