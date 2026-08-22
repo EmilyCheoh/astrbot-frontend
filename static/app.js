@@ -74,6 +74,7 @@
   // ==================================================================
 
   function renderMarkdown(text) {
+    if (!text) return "";
     if (typeof marked !== "undefined" && typeof DOMPurify !== "undefined") {
       const html = marked.parse(text, { breaks: true, gfm: true });
       return DOMPurify.sanitize(html, {
@@ -199,10 +200,8 @@
   const TIMESTAMP_TAG_RE = /<(?:current_)?date_and_time>[\s\S]*?<\/(?:current_)?date_and_time>\s*$/;
 
   function renderHistory(messages) {
-    console.log("[Den] renderHistory received", messages.length, "messages");
     for (const msg of messages) {
       const role = msg.role || "system";
-      console.log("[Den] msg:", role, typeof msg.content, Array.isArray(msg.content) ? "array" : "", msg.content?.toString?.()?.slice(0, 80));
       if (role === "tool" || role === "system") continue;
 
       let text = "";
