@@ -1,22 +1,71 @@
 (() => {
   "use strict";
 
-  // ---- DOM refs ----
-  const loginDiv    = document.getElementById("login");
-  const chatDiv     = document.getElementById("chat");
-  const tokenInput  = document.getElementById("token-input");
-  const loginBtn    = document.getElementById("login-btn");
-  const messagesDiv = document.getElementById("messages");
-  const statusBar   = document.getElementById("status-bar");
-  const msgInput    = document.getElementById("msg-input");
-  const sendBtn     = document.getElementById("send-btn");
+  // ==================================================================
+  // Theme
+  // ==================================================================
+
+  function initTheme() {
+    const saved = localStorage.getItem("den-theme");
+    if (saved === "light" || saved === "dark") {
+      document.documentElement.setAttribute("data-theme", saved);
+    } else {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.setAttribute("data-theme", prefersDark ? "dark" : "light");
+    }
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute("data-theme");
+    const next = current === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("den-theme", next);
+  }
+
+  initTheme();
+
+  // ==================================================================
+  // Markdown rendering
+  // ==================================================================
+
+  function renderMarkdown(text) {
+    if (typeof marked !== "undefined" && typeof DOMPurify !== "undefined") {
+      const html = marked.parse(text, { breaks: true, gfm: true });
+      return DOMPurify.sanitize(html, {
+        ADD_TAGS: ["details", "summary"],
+        ADD_ATTR: ["open"],
+      });
+    }
+    // Fallback: escape HTML and convert newlines to <br>
+    const el = document.createElement("span");
+    el.textContent = text;
+    return el.innerHTML.replace(/\n/g, "<br>");
+  }
+
+  // ==================================================================
+  // DOM refs
+  // ==================================================================
+
+  const loginDiv          = document.getElementById("login");
+  const chatDiv           = document.getElementById("chat");
+  const tokenInput        = document.getElementById("token-input");
+  const loginBtn          = document.getElementById("login-btn");
+  const messagesDiv       = document.getElementById("messages");
+  const chatScroll        = document.getElementById("chat-scroll");
+  const thinkingIndicator = document.getElementById("thinking-indicator");
+  const msgInput          = document.getElementById("msg-input");
+  const sendBtn           = document.getElementById("send-btn");
+  const themeToggle       = document.getElementById("theme-toggle");
 
   let ws = null;
   let savedToken = null;
   let reconnectDelay = 1000;
   let reconnecting = false;
 
-  // ---- Connect ----
+  // ==================================================================
+  // WebSocket connection
+  // ==================================================================
+
   function connect(token) {
     savedToken = token;
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -24,7 +73,7 @@
 
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: "auth", token: savedToken }));
-      reconnectDelay = 1000; // reset on successful connect
+      reconnectDelay = 1000;
     };
 
     ws.onmessage = (evt) => {
@@ -39,37 +88,39 @@
     };
 
     ws.onerror = () => {
-      // onclose will fire after this, reconnect handled there
+      // onclose fires after this — reconnection handled there
     };
   }
 
-  // ---- Auto-reconnect ----
+  // ==================================================================
+  // Auto-reconnect
+  // ==================================================================
+
   function scheduleReconnect() {
     reconnecting = true;
-    statusBar.textContent = "reconnecting...";
-    statusBar.classList.remove("hidden");
-
     setTimeout(() => {
       reconnecting = false;
       connect(savedToken);
-      // cap delay at 15 seconds
       reconnectDelay = Math.min(reconnectDelay * 1.5, 15000);
     }, reconnectDelay);
   }
 
-  // ---- Handle incoming messages ----
+  // ==================================================================
+  // Incoming message handler
+  // ==================================================================
+
   function handleMessage(data) {
     switch (data.type) {
       case "auth_ok":
         loginDiv.classList.add("hidden");
         chatDiv.classList.remove("hidden");
-        statusBar.classList.add("hidden");
+        thinkingIndicator.classList.add("hidden");
         msgInput.focus();
         break;
 
       case "error":
         alert(data.message || "Authentication failed");
-        savedToken = null; // don't reconnect with a bad token
+        savedToken = null;
         break;
 
       case "message_ack":
@@ -77,59 +128,90 @@
 
       case "status":
         if (data.status === "thinking") {
-          statusBar.textContent = "thinking...";
-          statusBar.classList.remove("hidden");
+          thinkingIndicator.classList.remove("hidden");
+          scrollToBottom();
         } else {
-          statusBar.classList.add("hidden");
+          thinkingIndicator.classList.add("hidden");
         }
         break;
 
       case "message":
-        statusBar.classList.add("hidden");
+        thinkingIndicator.classList.add("hidden");
         appendBot(data.segments || []);
         break;
     }
   }
 
-  // ---- Append messages ----
+  // ==================================================================
+  // Render messages
+  // ==================================================================
+
   function appendUser(text) {
     const div = document.createElement("div");
-    div.className = "msg user";
+    div.className = "msg-user";
     div.textContent = text;
     messagesDiv.appendChild(div);
     scrollToBottom();
   }
 
   function appendBot(segments) {
-    const div = document.createElement("div");
-    div.className = "msg bot";
+    const wrapper = document.createElement("div");
+    wrapper.className = "msg-bot";
 
     for (const seg of segments) {
-      if (seg.type === "text") {
-        const span = document.createElement("span");
-        span.textContent = seg.data;
-        div.appendChild(span);
-      } else if (seg.type === "image") {
-        const img = document.createElement("img");
-        img.src = seg.data;
-        div.appendChild(img);
-      } else if (seg.type === "audio") {
-        const audio = document.createElement("audio");
-        audio.controls = true;
-        audio.src = seg.data;
-        div.appendChild(audio);
+      switch (seg.type) {
+        case "text": {
+          const content = document.createElement("div");
+          content.innerHTML = renderMarkdown(seg.data);
+          wrapper.appendChild(content);
+          break;
+        }
+
+        case "image": {
+          const img = document.createElement("img");
+          img.src = seg.data;
+          wrapper.appendChild(img);
+          break;
+        }
+
+        case "audio": {
+          const audio = document.createElement("audio");
+          audio.controls = true;
+          audio.src = seg.data;
+          wrapper.appendChild(audio);
+          break;
+        }
+
+        case "reasoning": {
+          const details = document.createElement("details");
+          details.className = "cot-block";
+          const summary = document.createElement("summary");
+          summary.textContent = "Thinking\u2026";
+          const body = document.createElement("div");
+          body.className = "cot-content";
+          body.textContent = seg.data;
+          details.appendChild(summary);
+          details.appendChild(body);
+          wrapper.appendChild(details);
+          break;
+        }
       }
     }
 
-    messagesDiv.appendChild(div);
+    messagesDiv.appendChild(wrapper);
     scrollToBottom();
   }
 
   function scrollToBottom() {
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    requestAnimationFrame(() => {
+      chatScroll.scrollTop = chatScroll.scrollHeight;
+    });
   }
 
-  // ---- Send message ----
+  // ==================================================================
+  // Send message
+  // ==================================================================
+
   function sendMessage() {
     const text = msgInput.value.trim();
     if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
@@ -141,13 +223,19 @@
     msgInput.style.height = "auto";
   }
 
-  // ---- Auto-resize textarea ----
+  // ==================================================================
+  // Auto-resize textarea
+  // ==================================================================
+
   msgInput.addEventListener("input", () => {
     msgInput.style.height = "auto";
     msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + "px";
   });
 
-  // ---- Event listeners ----
+  // ==================================================================
+  // Event listeners
+  // ==================================================================
+
   loginBtn.addEventListener("click", () => connect(tokenInput.value));
   tokenInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") connect(tokenInput.value);
@@ -160,4 +248,6 @@
       sendMessage();
     }
   });
+
+  themeToggle.addEventListener("click", toggleTheme);
 })();

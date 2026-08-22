@@ -1,22 +1,77 @@
+/* ================================================================
+   Den — A&F Web Frontend
+   Color palette: Claude-inspired warm neutrals, no accent color.
+   ================================================================ */
+
+/* ---- Theme: Light (default) ---- */
+:root,
+[data-theme="light"] {
+  --bg-primary: #FAF9F5;
+  --bg-secondary: #F1F0EA;
+  --bg-hover: #EAE8E1;
+  --bg-card: #FFFFFF;
+  --text-primary: #141413;
+  --text-secondary: #3D3D3A;
+  --text-supporting: #6B6B69;
+  --text-muted: #868682;
+  --text-placeholder: #9B9B97;
+  --border-subtle: #E3E2DC;
+  --border-default: #D4D3CC;
+  --border-strong: #C5C4BE;
+  --user-bubble: #EAE8E1;
+  --code-bg: #F1F0EA;
+  --cot-bg: #F8F7F3;
+  --cot-border: #E3E2DC;
+}
+
+/* ---- Theme: Dark ---- */
+[data-theme="dark"] {
+  --bg-primary: #1A1A1A;
+  --bg-secondary: #252525;
+  --bg-hover: #333333;
+  --bg-card: #111111;
+  --text-primary: #E8E8E8;
+  --text-secondary: #CCCCCC;
+  --text-supporting: #999999;
+  --text-muted: #777777;
+  --text-placeholder: #555555;
+  --border-subtle: #333333;
+  --border-default: #444444;
+  --border-strong: #555555;
+  --user-bubble: #333333;
+  --code-bg: #252525;
+  --cot-bg: #222222;
+  --cot-border: #3A3A3A;
+}
+
+/* ---- Reset ---- */
 * { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+}
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #f5f5f0;
-  color: #2c2c2c;
-  height: 100dvh;
-  display: flex;
-  flex-direction: column;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .hidden { display: none !important; }
 
-/* ---- Login ---- */
+
+/* ================================================================
+   Login
+   ================================================================ */
+
 #login {
   height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--bg-primary);
 }
 
 .login-box {
@@ -24,130 +79,419 @@ body {
   flex-direction: column;
   gap: 12px;
   padding: 32px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  background: var(--bg-card);
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
   min-width: 280px;
 }
 
 .login-box h2 {
   text-align: center;
   font-weight: 500;
-  color: #555;
+  color: var(--text-supporting);
+  font-size: 18px;
+  letter-spacing: 0.5px;
 }
 
 .login-box input {
   padding: 10px 14px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
   font-size: 14px;
   outline: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: border-color 0.15s;
 }
 
-.login-box input:focus { border-color: #aaa; }
+.login-box input::placeholder { color: var(--text-placeholder); }
+.login-box input:focus { border-color: var(--border-strong); }
 
 .login-box button {
   padding: 10px;
   border: none;
-  border-radius: 8px;
-  background: #6b6b6b;
-  color: #fff;
+  border-radius: 12px;
+  background: var(--text-supporting);
+  color: var(--bg-card);
   font-size: 14px;
   cursor: pointer;
+  transition: background 0.15s;
 }
 
-.login-box button:hover { background: #555; }
+.login-box button:hover { background: var(--text-secondary); }
 
-/* ---- Chat ---- */
-#chat {
-  display: flex;
-  flex-direction: column;
+
+/* ================================================================
+   Chat layout — 3-row grid: header | scroll | composer
+   ================================================================ */
+
+.chat-layout {
   height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 
-#messages {
-  flex: 1;
+/* ---- Header ---- */
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+
+.header-spacer { width: 36px; }
+
+.header-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-supporting);
+  letter-spacing: 0.3px;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Sun shown in dark mode (click → light), moon shown in light mode (click → dark) */
+[data-theme="light"] .icon-sun { display: none; }
+[data-theme="light"] .icon-moon { display: block; }
+[data-theme="dark"] .icon-sun { display: block; }
+[data-theme="dark"] .icon-moon { display: none; }
+
+
+/* ================================================================
+   Chat scroll area
+   ================================================================ */
+
+.chat-scroll {
+  min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  overscroll-behavior: contain;
+}
+
+.chat-content {
+  width: min(100% - 32px, 760px);
+  margin: 0 auto;
+  padding: 24px 0 48px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 24px;
 }
 
-.msg {
-  max-width: 75%;
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 14px;
-  line-height: 1.6;
+
+/* ================================================================
+   Messages
+   ================================================================ */
+
+/* ---- User bubble ---- */
+.msg-user {
+  width: fit-content;
+  max-width: 80%;
+  margin-left: auto;
+  padding: 10px 16px;
+  border-radius: 20px;
+  background: var(--user-bubble);
+  font-size: 15px;
+  line-height: 1.5;
   word-wrap: break-word;
   white-space: pre-wrap;
 }
 
-.msg.user {
-  align-self: flex-end;
-  background: #d4e4d4;
-  border-bottom-right-radius: 4px;
+/* ---- Bot / assistant message ---- */
+.msg-bot {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--text-primary);
 }
 
-.msg.bot {
-  align-self: flex-start;
-  background: #fff;
-  border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+/* ---- Markdown content inside bot messages ---- */
+.msg-bot p {
+  margin: 0 0 12px;
 }
 
-.msg img {
-  max-width: 100%;
-  border-radius: 8px;
-  margin-top: 6px;
+.msg-bot p:last-child { margin-bottom: 0; }
+
+.msg-bot h1, .msg-bot h2, .msg-bot h3,
+.msg-bot h4, .msg-bot h5, .msg-bot h6 {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 20px 0 8px;
+  line-height: 1.35;
+  color: var(--text-primary);
 }
 
-.msg audio {
-  margin-top: 6px;
-  max-width: 100%;
+.msg-bot h1 { font-size: 1.4em; }
+.msg-bot h2 { font-size: 1.25em; }
+.msg-bot h3 { font-size: 1.1em; }
+.msg-bot h4, .msg-bot h5, .msg-bot h6 { font-size: 1em; }
+
+.msg-bot strong { font-weight: 700; }
+.msg-bot em { font-style: italic; }
+
+.msg-bot a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
-/* ---- Status bar ---- */
-#status-bar {
-  padding: 6px 16px;
-  font-size: 12px;
-  color: #999;
+.msg-bot a:hover { color: var(--text-primary); }
+
+.msg-bot ul, .msg-bot ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.msg-bot li { margin: 4px 0; }
+
+.msg-bot li > p { margin-bottom: 4px; }
+
+.msg-bot blockquote {
+  margin: 12px 0;
+  padding: 8px 16px;
+  border-left: 3px solid var(--border-default);
+  color: var(--text-supporting);
   font-style: italic;
 }
 
-/* ---- Input area ---- */
-#input-area {
-  display: flex;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid #e5e5e0;
-  background: #fff;
+/* ---- Code ---- */
+.msg-bot code {
+  font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+  font-size: 0.87em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--code-bg);
 }
 
-#msg-input {
-  flex: 1;
-  padding: 10px 14px;
-  border: 1px solid #ddd;
+.msg-bot pre {
+  margin: 12px 0;
+  padding: 14px 16px;
   border-radius: 8px;
-  font-size: 14px;
-  font-family: inherit;
-  resize: none;
-  outline: none;
-  max-height: 120px;
+  background: var(--code-bg);
+  border: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-#msg-input:focus { border-color: #aaa; }
+.msg-bot pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.55;
+}
 
-#send-btn {
-  padding: 10px 20px;
+/* ---- Tables ---- */
+.msg-bot table {
+  width: 100%;
+  margin: 12px 0;
+  border-collapse: collapse;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+}
+
+.msg-bot th, .msg-bot td {
+  padding: 8px 12px;
+  border: 1px solid var(--border-default);
+  text-align: left;
+}
+
+.msg-bot th {
+  background: var(--bg-secondary);
+  font-weight: 600;
+}
+
+.msg-bot hr {
+  margin: 16px 0;
   border: none;
-  border-radius: 8px;
-  background: #6b6b6b;
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
-  align-self: flex-end;
+  border-top: 1px solid var(--border-subtle);
 }
 
-#send-btn:hover { background: #555; }
+/* ---- Media in messages ---- */
+.msg-bot img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.msg-bot audio {
+  margin: 8px 0;
+  max-width: 100%;
+}
+
+
+/* ================================================================
+   CoT (Chain of Thought) — collapsible block
+   ================================================================ */
+
+.cot-block {
+  margin: 4px 0 16px;
+  border: 1px solid var(--cot-border);
+  border-radius: 8px;
+  background: var(--cot-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.cot-block summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  user-select: none;
+  list-style: none;
+}
+
+.cot-block summary::-webkit-details-marker { display: none; }
+
+.cot-block summary::before {
+  content: "\25B6\FE0E";
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.cot-block[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.cot-block summary:hover { color: var(--text-supporting); }
+
+.cot-block .cot-content {
+  padding: 0 12px 10px;
+  color: var(--text-supporting);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+
+/* ================================================================
+   Thinking indicator — pulsing dots
+   ================================================================ */
+
+.thinking-indicator {
+  width: min(100% - 32px, 760px);
+  margin: 0 auto;
+  padding: 8px 0;
+  display: flex;
+  gap: 5px;
+}
+
+.thinking-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-placeholder);
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+
+.thinking-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dot-pulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+
+/* ================================================================
+   Composer — bottom input area
+   ================================================================ */
+
+.composer-section {
+  padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  background: var(--bg-primary);
+}
+
+.composer {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: 12px 12px 12px 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 24px;
+  background: var(--bg-card);
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  transition: border-color 0.15s;
+}
+
+.composer:focus-within {
+  border-color: var(--border-strong);
+}
+
+.composer textarea {
+  flex: 1;
+  display: block;
+  min-height: 24px;
+  max-height: 120px;
+  padding: 0;
+  resize: none;
+  border: 0;
+  outline: 0;
+  color: var(--text-primary);
+  background: transparent;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.composer textarea::placeholder { color: var(--text-placeholder); }
+
+.send-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.send-btn:hover { opacity: 0.8; }
+
+
+/* ================================================================
+   Scrollbar
+   ================================================================ */
+
+.chat-scroll::-webkit-scrollbar { width: 6px; }
+.chat-scroll::-webkit-scrollbar-track { background: transparent; }
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+.cot-content::-webkit-scrollbar { width: 4px; }
+.cot-content::-webkit-scrollbar-track { background: transparent; }
+.cot-content::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 2px;
+}

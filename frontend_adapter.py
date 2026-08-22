@@ -24,7 +24,7 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, Image, Record
+from astrbot.api.message_components import Node, Plain, Image, Record
 from astrbot import logger
 
 from .frontend_event import FrontendEvent
@@ -227,6 +227,14 @@ class FrontendAdapter(Platform):
                 uri = await self._media_to_data_uri(comp)
                 if uri:
                     segments.append({"type": "audio", "data": uri})
+            elif isinstance(comp, Node):
+                # CoT / forwarded-message nodes — extract text for reasoning display
+                texts = []
+                for sub in comp.content:
+                    if isinstance(sub, Plain) and sub.text and sub.text.strip():
+                        texts.append(sub.text.strip())
+                if texts:
+                    segments.append({"type": "reasoning", "data": "\n".join(texts)})
         return segments
 
     async def _media_to_data_uri(self, component) -> str | None:
