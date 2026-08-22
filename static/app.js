@@ -188,7 +188,6 @@
         break;
 
       case "history":
-        console.log("[Den] history raw:", JSON.stringify(data).slice(0, 2000));
         renderHistory(data.messages || []);
         break;
     }
@@ -201,10 +200,8 @@
   const TIMESTAMP_TAG_RE = /<(?:current_)?date_and_time>[\s\S]*?<\/(?:current_)?date_and_time>\s*$/;
 
   function renderHistory(messages) {
-    console.log("[Den] renderHistory called, count:", messages.length);
     for (const msg of messages) {
       const role = msg.role || "system";
-      console.log("[Den] msg role:", role, "content type:", typeof msg.content, "isArray:", Array.isArray(msg.content));
       if (role === "tool" || role === "system") continue;
 
       let text = "";
@@ -213,7 +210,7 @@
       if (Array.isArray(msg.content)) {
         for (const block of msg.content) {
           if (block.type === "thinking" || block.type === "think") {
-            thinkText += (block.think || block.text || block.content || "") + "\n";
+            thinkText += (block.thinking || block.think || block.text || block.content || "") + "\n";
           } else if (block.type === "text") {
             text += block.text || block.content || "";
           } else if (typeof block === "string") {

@@ -176,16 +176,7 @@ class FrontendAdapter(Platform):
                 return
 
             platform_id = self.config.get("id", "abyss_web")
-            logger.info(f"History: db={db_path}, platform_id={platform_id}")
-
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-
-            # Debug: list all distinct platform_ids in the DB
-            debug_cursor = conn.execute(
-                "SELECT DISTINCT platform_id FROM conversations"
-            )
-            all_ids = [r[0] for r in debug_cursor.fetchall()]
-            logger.info(f"History: platform_ids in DB = {all_ids}")
 
             cursor = conn.execute(
                 "SELECT content FROM conversations "
@@ -197,14 +188,12 @@ class FrontendAdapter(Platform):
 
             if row and row[0]:
                 messages = json.loads(row[0])
-                count = len(messages[-50:])
-                logger.info(f"History: sending {count} messages")
                 await ws.send_json({
                     "type": "history",
-                    "messages": messages[-50:],
+                    "messages": messages,
                 })
             else:
-                logger.info(f"History: no rows found for platform_id={platform_id}")
+                logger.info(f"History: no conversation found for {platform_id}")
         except Exception as exc:
             logger.warning(f"Failed to load chat history: {exc}")
 

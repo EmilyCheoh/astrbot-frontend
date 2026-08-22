@@ -1,4 +1,4 @@
-Now show chat history
+Now show chat history - done
 
 Aug 22 - V2
 
