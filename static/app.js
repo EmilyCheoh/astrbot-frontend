@@ -2,27 +2,72 @@
   "use strict";
 
   // ==================================================================
-  // Theme
+  // Theme — Light / Dark / Auto (3-state cycle)
   // ==================================================================
 
-  function initTheme() {
-    const saved = localStorage.getItem("den-theme");
-    if (saved === "light" || saved === "dark") {
-      document.documentElement.setAttribute("data-theme", saved);
-    } else {
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      document.documentElement.setAttribute("data-theme", prefersDark ? "dark" : "light");
+  const THEME_MODES = ["light", "dark", "auto"];
+  const THEME_ICONS = { light: "\u2600\uFE0E", dark: "\u263E", auto: "\u25D0" };
+
+  function getResolvedTheme(mode) {
+    if (mode === "auto") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    return mode;
+  }
+
+  function applyTheme(mode) {
+    const resolved = getResolvedTheme(mode);
+    document.documentElement.setAttribute("data-theme", resolved);
+    localStorage.setItem("den-theme", mode);
+    const btn = document.getElementById("theme-toggle");
+    if (btn) {
+      btn.textContent = THEME_ICONS[mode];
+      btn.title = "Theme: " + mode;
     }
   }
 
-  function toggleTheme() {
-    const current = document.documentElement.getAttribute("data-theme");
-    const next = current === "dark" ? "light" : "dark";
-    document.documentElement.setAttribute("data-theme", next);
-    localStorage.setItem("den-theme", next);
+  function cycleTheme() {
+    const current = localStorage.getItem("den-theme") || "auto";
+    const next = THEME_MODES[(THEME_MODES.indexOf(current) + 1) % THEME_MODES.length];
+    applyTheme(next);
   }
 
-  initTheme();
+  // Re-apply when system preference changes (only matters in auto mode)
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if ((localStorage.getItem("den-theme") || "auto") === "auto") {
+      applyTheme("auto");
+    }
+  });
+
+  applyTheme(localStorage.getItem("den-theme") || "auto");
+
+  // ==================================================================
+  // Font — Serif / Sans-serif toggle
+  // ==================================================================
+
+  const FONT_SERIF = 'Georgia, "Times New Roman", serif';
+  const FONT_SANS  = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+  function applyFont(family) {
+    const isSerif = family === "serif";
+    document.documentElement.style.setProperty(
+      "--font-bot",
+      isSerif ? FONT_SERIF : FONT_SANS
+    );
+    localStorage.setItem("den-font", family);
+    const btn = document.getElementById("font-toggle");
+    if (btn) {
+      btn.className = "icon-btn " + (isSerif ? "serif" : "sans");
+      btn.title = "Font: " + family;
+    }
+  }
+
+  function cycleFont() {
+    const current = localStorage.getItem("den-font") || "serif";
+    applyFont(current === "serif" ? "sans-serif" : "serif");
+  }
+
+  applyFont(localStorage.getItem("den-font") || "serif");
 
   // ==================================================================
   // Markdown rendering
@@ -56,6 +101,7 @@
   const msgInput          = document.getElementById("msg-input");
   const sendBtn           = document.getElementById("send-btn");
   const themeToggle       = document.getElementById("theme-toggle");
+  const fontToggle        = document.getElementById("font-toggle");
 
   let ws = null;
   let savedToken = null;
@@ -249,5 +295,6 @@
     }
   });
 
-  themeToggle.addEventListener("click", toggleTheme);
+  themeToggle.addEventListener("click", cycleTheme);
+  fontToggle.addEventListener("click", cycleFont);
 })();
