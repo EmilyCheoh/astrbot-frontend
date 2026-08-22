@@ -108,11 +108,15 @@
   const convPanel         = document.getElementById("conv-panel");
   const convList          = document.getElementById("conv-list");
   const newConvBtn        = document.getElementById("new-conv-btn");
+  const attachBtn         = document.getElementById("attach-btn");
+  const fileInput         = document.getElementById("file-input");
+  const imgPreview        = document.getElementById("img-preview");
 
   let ws = null;
   let savedToken = null;
   let reconnectDelay = 1000;
   let reconnecting = false;
+  let pendingImages = [];  // data URIs waiting to be sent
 
   // ==================================================================
   // WebSocket connection
@@ -338,13 +342,18 @@
 
   function sendMessage() {
     const text = msgInput.value.trim();
-    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+    const images = pendingImages.slice();
+    if ((!text && images.length === 0) || !ws || ws.readyState !== WebSocket.OPEN) return;
 
     const id = crypto.randomUUID();
-    ws.send(JSON.stringify({ type: "message", id, content: text }));
-    appendUser(text);
+    const payload = { type: "message", id, content: text };
+    if (images.length > 0) payload.images = images;
+
+    ws.send(JSON.stringify(payload));
+    appendUser(text || "[image]");
     msgInput.value = "";
     msgInput.style.height = "auto";
+    clearPendingImages();
   }
 
   // ==================================================================
@@ -355,6 +364,55 @@
     msgInput.style.height = "auto";
     msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + "px";
   });
+
+  // ==================================================================
+  // Image attachment
+  // ==================================================================
+
+  function addImages(files) {
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) continue;
+      const reader = new FileReader();
+      reader.onload = () => {
+        pendingImages.push(reader.result);
+        renderImagePreview();
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function renderImagePreview() {
+    imgPreview.innerHTML = "";
+    if (pendingImages.length === 0) {
+      imgPreview.classList.add("hidden");
+      return;
+    }
+    imgPreview.classList.remove("hidden");
+    pendingImages.forEach((uri, i) => {
+      const item = document.createElement("div");
+      item.className = "img-preview-item";
+
+      const img = document.createElement("img");
+      img.src = uri;
+
+      const rm = document.createElement("button");
+      rm.className = "img-preview-remove";
+      rm.textContent = "\u00D7";
+      rm.addEventListener("click", () => {
+        pendingImages.splice(i, 1);
+        renderImagePreview();
+      });
+
+      item.appendChild(img);
+      item.appendChild(rm);
+      imgPreview.appendChild(item);
+    });
+  }
+
+  function clearPendingImages() {
+    pendingImages.length = 0;
+    renderImagePreview();
+  }
 
   // ==================================================================
   // Conversation panel
@@ -448,5 +506,28 @@
   newConvBtn.addEventListener("click", () => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: "new_conversation" }));
+  });
+
+  attachBtn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length > 0) addImages(fileInput.files);
+    fileInput.value = "";
+  });
+
+  // Paste image from clipboard
+  msgInput.addEventListener("paste", (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const imageFiles = [];
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      addImages(imageFiles);
+    }
   });
 })();

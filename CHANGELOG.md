@@ -1,4 +1,4 @@
-v3 - debugging
+v3 - supporting image
 
 Now show chat history - done
 

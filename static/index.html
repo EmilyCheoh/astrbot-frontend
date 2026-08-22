@@ -1,14 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Den</title>
-  <style>.hidden{display:none!important}</style>
+  <style>
+    .hidden {
+      display: none !important
+    }
+  </style>
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
 </head>
+
 <body>
   <!-- Login -->
   <div id="login">
@@ -48,17 +54,24 @@
 
     <footer class="composer-section">
       <div class="composer">
-        <textarea id="msg-input" placeholder="Reply..." rows="1"></textarea>
-        <button id="send-btn" class="send-btn" title="Send">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="19" x2="12" y2="5"/>
-            <polyline points="5 12 12 5 19 12"/>
-          </svg>
-        </button>
+        <div id="img-preview" class="img-preview hidden"></div>
+        <div class="composer-row">
+          <button id="attach-btn" class="attach-btn" title="Attach image">+</button>
+          <input type="file" id="file-input" accept="image/*" multiple class="hidden">
+          <textarea id="msg-input" placeholder="Talk to me..." rows="1"></textarea>
+          <button id="send-btn" class="send-btn" title="Send">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="19" x2="12" y2="5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg>
+          </button>
+        </div>
       </div>
     </footer>
   </div>
 
   <script src="/static/app.js"></script>
 </body>
+
 </html>
