@@ -356,7 +356,7 @@ class FrontendAdapter(Platform):
             await ws.send_json({"type": "status", "status": "idle"})
             return
 
-        success = await self._truncate_last_exchange()
+        success = await self._truncate_last_exchange(expected_content=content)
         if not success:
             logger.warning("Retry/edit failed: could not truncate history")
             await ws.send_json({"type": "status", "status": "idle"})
@@ -367,12 +367,18 @@ class FrontendAdapter(Platform):
             {"content": content, "id": str(uuid.uuid4())}, ws,
         )
 
-    async def _truncate_last_exchange(self) -> bool:
+    async def _truncate_last_exchange(self, expected_content: str = "") -> bool:
         """Remove the last user+assistant exchange from conversation history.
 
         Strips everything from the last user message onwards.  AstrBot's
         pipeline will re-add the user message when the re-fired event
         is processed.
+
+        If *expected_content* is given, the method verifies that the last
+        user message in the DB actually contains that text.  A mismatch
+        means the frontend's "last message" is something that was never
+        stored (e.g. an AstrBot command response) — in that case we skip
+        truncation and return True so the caller still fires the message.
         """
         try:
             if not runtime.conversation_manager:
@@ -413,6 +419,26 @@ class FrontendAdapter(Platform):
             if last_user_idx is None:
                 logger.warning("No user message found in history to truncate")
                 return False
+
+            # Verify that the DB's last user message matches the content
+            # we are retrying / editing.  If it doesn't, the frontend's
+            # "last message" was probably a command that AstrBot handled
+            # without storing — skip truncation to avoid deleting a real
+            # exchange.
+            if expected_content.strip():
+                db_content = history[last_user_idx].get("content", "")
+                if isinstance(db_content, list):
+                    db_content = "".join(
+                        b.get("text", "")
+                        for b in db_content
+                        if isinstance(b, dict) and b.get("type") == "text"
+                    )
+                if expected_content.strip() not in str(db_content):
+                    logger.info(
+                        "Skipping truncation: retry/edit content not found "
+                        "in last DB user message (likely a command response)"
+                    )
+                    return True
 
             # Truncate everything from the last user message onwards
             truncated = history[:last_user_idx]
