@@ -167,12 +167,12 @@ class FrontendAdapter(Platform):
                     # --- Edit / Retry --------------------------------------
                     elif kind == "retry" and authenticated:
                         await self._handle_retry_or_edit(
-                            ws, data.get("content", ""),
+                            ws, data.get("content", ""), action="retry",
                         )
 
                     elif kind == "edit_message" and authenticated:
                         await self._handle_retry_or_edit(
-                            ws, data.get("content", ""),
+                            ws, data.get("content", ""), action="edit",
                         )
 
                     # --- Heartbeat -----------------------------------------
@@ -350,13 +350,13 @@ class FrontendAdapter(Platform):
 
     # -- Retry / Edit --------------------------------------------------------
 
-    async def _handle_retry_or_edit(self, ws: web.WebSocketResponse, content: str):
+    async def _handle_retry_or_edit(self, ws: web.WebSocketResponse, content: str, *, action: str = "retry"):
         """Handle retry or edit: truncate last exchange, re-fire message."""
         if not content.strip():
             await ws.send_json({"type": "status", "status": "idle"})
             return
 
-        success = await self._truncate_last_exchange(expected_content=content)
+        success = await self._truncate_last_exchange(expected_content=content, action=action)
         if not success:
             logger.warning("Retry/edit failed: could not truncate history")
             await ws.send_json({"type": "status", "status": "idle"})
@@ -367,7 +367,7 @@ class FrontendAdapter(Platform):
             {"content": content, "id": str(uuid.uuid4())}, ws,
         )
 
-    async def _truncate_last_exchange(self, expected_content: str = "") -> bool:
+    async def _truncate_last_exchange(self, expected_content: str = "", *, action: str = "retry") -> bool:
         """Remove the last user+assistant exchange from conversation history.
 
         Strips everything from the last user message onwards.  AstrBot's
@@ -448,7 +448,7 @@ class FrontendAdapter(Platform):
             )
 
             logger.info(
-                f"Truncated conversation {cid}: "
+                f"Truncated conversation {cid} ({action}): "
                 f"{len(history)} -> {len(truncated)} messages"
             )
             return True
