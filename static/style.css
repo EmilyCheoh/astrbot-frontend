@@ -351,6 +351,67 @@ body {
 
 
 /* ================================================================
+   Message rows & action bars
+   ================================================================ */
+
+.msg-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.msg-row-user {
+  align-items: flex-end;
+}
+
+.msg-row-bot {
+  align-items: flex-start;
+}
+
+.msg-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.msg-row:hover .msg-actions {
+  opacity: 1;
+}
+
+/* On touch devices, always show */
+@media (hover: none) {
+  .msg-actions {
+    opacity: 1;
+  }
+}
+
+.msg-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  padding: 0;
+}
+
+.msg-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.msg-action-btn.copied {
+  color: var(--text-supporting);
+}
+
+
+/* ================================================================
    CoT (Chain of Thought) — collapsible block
    ================================================================ */
 

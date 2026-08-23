@@ -274,17 +274,64 @@
   // Render messages
   // ==================================================================
 
+  function createActionBar(actions) {
+    const bar = document.createElement("div");
+    bar.className = "msg-actions";
+    for (const { icon, title, onClick } of actions) {
+      const btn = document.createElement("button");
+      btn.className = "msg-action-btn";
+      btn.title = title;
+      btn.innerHTML = icon;
+      btn.addEventListener("click", onClick);
+      bar.appendChild(btn);
+    }
+    return bar;
+  }
+
+  const ICON_COPY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const ICON_CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  const ICON_RETRY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
+  const ICON_EDIT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+
+  function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      const original = btn.innerHTML;
+      btn.innerHTML = ICON_CHECK;
+      btn.classList.add("copied");
+      setTimeout(() => {
+        btn.innerHTML = original;
+        btn.classList.remove("copied");
+      }, 1500);
+    });
+  }
+
   function appendUser(text) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "msg-row msg-row-user";
+
     const div = document.createElement("div");
     div.className = "msg-user";
     div.textContent = text;
-    messagesDiv.appendChild(div);
+
+    const actions = createActionBar([
+      { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(text, e.currentTarget) },
+    ]);
+
+    wrapper.appendChild(div);
+    wrapper.appendChild(actions);
+    messagesDiv.appendChild(wrapper);
     scrollToBottom();
   }
 
   function appendBot(segments) {
+    const row = document.createElement("div");
+    row.className = "msg-row msg-row-bot";
+
     const wrapper = document.createElement("div");
     wrapper.className = "msg-bot";
+
+    // Collect plain text from text segments for copy
+    let plainText = "";
 
     for (const seg of segments) {
       switch (seg.type) {
@@ -292,6 +339,7 @@
           const content = document.createElement("div");
           content.innerHTML = renderMarkdown(seg.data);
           wrapper.appendChild(content);
+          plainText += seg.data;
           break;
         }
 
@@ -326,7 +374,13 @@
       }
     }
 
-    messagesDiv.appendChild(wrapper);
+    const actions = createActionBar([
+      { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(plainText, e.currentTarget) },
+    ]);
+
+    row.appendChild(wrapper);
+    row.appendChild(actions);
+    messagesDiv.appendChild(row);
     scrollToBottom();
   }
 
@@ -491,12 +545,6 @@
   });
 
   sendBtn.addEventListener("click", sendMessage);
-  msgInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  });
 
   themeToggle.addEventListener("click", cycleTheme);
   fontToggle.addEventListener("click", cycleFont);
