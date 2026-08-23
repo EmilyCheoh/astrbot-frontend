@@ -117,6 +117,8 @@
   let reconnectDelay = 1000;
   let reconnecting = false;
   let pendingImages = [];  // data URIs waiting to be sent
+  let isProcessing = false;
+  let batchRendering = false;
 
   // ==================================================================
   // WebSocket connection
@@ -184,14 +186,17 @@
 
       case "status":
         if (data.status === "thinking") {
+          isProcessing = true;
           thinkingIndicator.classList.remove("hidden");
           scrollToBottom();
         } else {
+          isProcessing = false;
           thinkingIndicator.classList.add("hidden");
         }
         break;
 
       case "message":
+        isProcessing = false;
         thinkingIndicator.classList.add("hidden");
         appendBot(data.segments || []);
         break;
@@ -223,6 +228,7 @@
   const TIMESTAMP_TAG_RE = /<(?:current_)?date_and_time>[\s\S]*?<\/(?:current_)?date_and_time>\s*$/;
 
   function renderHistory(messages) {
+    batchRendering = true;
     for (const msg of messages) {
       const role = msg.role || "system";
       if (role === "tool" || role === "system") continue;
@@ -267,6 +273,8 @@
       }
     }
 
+    batchRendering = false;
+    updateLastActions();
     scrollToBottom();
   }
 
@@ -277,9 +285,9 @@
   function createActionBar(actions) {
     const bar = document.createElement("div");
     bar.className = "msg-actions";
-    for (const { icon, title, onClick } of actions) {
+    for (const { icon, title, onClick, className } of actions) {
       const btn = document.createElement("button");
-      btn.className = "msg-action-btn";
+      btn.className = "msg-action-btn" + (className ? " " + className : "");
       btn.title = title;
       btn.innerHTML = icon;
       btn.addEventListener("click", onClick);
@@ -290,7 +298,7 @@
 
   const ICON_COPY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   const ICON_CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-  const ICON_RETRY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
+  const ICON_RETRY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>';
   const ICON_EDIT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
 
   function copyText(text, btn) {
@@ -308,18 +316,21 @@
   function appendUser(text) {
     const wrapper = document.createElement("div");
     wrapper.className = "msg-row msg-row-user";
+    wrapper.dataset.text = text;
 
     const div = document.createElement("div");
     div.className = "msg-user";
     div.textContent = text;
 
     const actions = createActionBar([
+      { icon: ICON_EDIT, title: "Edit", onClick: () => handleEditClick(wrapper), className: "edit-btn" },
       { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(text, e.currentTarget) },
     ]);
 
     wrapper.appendChild(div);
     wrapper.appendChild(actions);
     messagesDiv.appendChild(wrapper);
+    if (!batchRendering) updateLastActions();
     scrollToBottom();
   }
 
@@ -375,18 +386,155 @@
     }
 
     const actions = createActionBar([
+      { icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" },
       { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(plainText, e.currentTarget) },
     ]);
 
     row.appendChild(wrapper);
     row.appendChild(actions);
     messagesDiv.appendChild(row);
+    if (!batchRendering) updateLastActions();
     scrollToBottom();
   }
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
       chatScroll.scrollTop = chatScroll.scrollHeight;
+    });
+  }
+
+  // ==================================================================
+  // Edit / Retry
+  // ==================================================================
+
+  function updateLastActions() {
+    messagesDiv.querySelectorAll(".msg-row-user.is-last, .msg-row-bot.is-last")
+      .forEach((el) => el.classList.remove("is-last"));
+    const users = messagesDiv.querySelectorAll(".msg-row-user");
+    const bots = messagesDiv.querySelectorAll(".msg-row-bot");
+    if (users.length) users[users.length - 1].classList.add("is-last");
+    if (bots.length) bots[bots.length - 1].classList.add("is-last");
+  }
+
+  function handleRetryClick(botRow) {
+    if (isProcessing || !botRow.classList.contains("is-last")) return;
+
+    // Remove any existing confirmation bar
+    const existing = document.querySelector(".retry-confirm");
+    if (existing) existing.remove();
+
+    const bar = document.createElement("div");
+    bar.className = "retry-confirm";
+    bar.innerHTML =
+      '<span class="retry-confirm-text">Regenerate this response?</span>' +
+      '<div class="retry-confirm-btns">' +
+      '<button class="retry-confirm-cancel">Cancel</button>' +
+      '<button class="retry-confirm-ok">Confirm</button>' +
+      "</div>";
+
+    bar.querySelector(".retry-confirm-cancel").addEventListener("click", () => bar.remove());
+    bar.querySelector(".retry-confirm-ok").addEventListener("click", () => {
+      bar.remove();
+      handleRetry(botRow);
+    });
+
+    botRow.appendChild(bar);
+  }
+
+  function handleRetry(botRow) {
+    if (isProcessing || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+    // Find the last user message text
+    const lastUser = messagesDiv.querySelector(".msg-row-user.is-last");
+    if (!lastUser) return;
+    const userText = lastUser.dataset.text;
+    if (!userText) return;
+
+    // Remove bot message from DOM
+    botRow.remove();
+    updateLastActions();
+
+    ws.send(JSON.stringify({ type: "retry", content: userText }));
+  }
+
+  function handleEditClick(userRow) {
+    if (isProcessing || !userRow.classList.contains("is-last")) return;
+    // Prevent double-editing
+    if (userRow.querySelector(".edit-area")) return;
+
+    const msgDiv = userRow.querySelector(".msg-user");
+    const actionsBar = userRow.querySelector(".msg-actions");
+    const originalText = userRow.dataset.text;
+
+    // Hide original content and actions
+    msgDiv.classList.add("hidden");
+    if (actionsBar) actionsBar.classList.add("hidden");
+
+    // Create edit UI
+    const editArea = document.createElement("div");
+    editArea.className = "edit-area";
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "edit-textarea";
+    textarea.value = originalText;
+
+    const btnRow = document.createElement("div");
+    btnRow.className = "edit-btns";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "edit-cancel-btn";
+    cancelBtn.textContent = "Cancel";
+
+    const sendBtn = document.createElement("button");
+    sendBtn.className = "edit-send-btn";
+    sendBtn.textContent = "Send";
+
+    function closeEdit() {
+      editArea.remove();
+      msgDiv.classList.remove("hidden");
+      if (actionsBar) actionsBar.classList.remove("hidden");
+    }
+
+    cancelBtn.addEventListener("click", closeEdit);
+
+    sendBtn.addEventListener("click", () => {
+      const newText = textarea.value.trim();
+      if (!newText || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+      // Remove edit UI and update user message display
+      editArea.remove();
+      msgDiv.textContent = newText;
+      msgDiv.classList.remove("hidden");
+      userRow.dataset.text = newText;
+      if (actionsBar) actionsBar.classList.remove("hidden");
+
+      // Remove the bot reply
+      const lastBot = messagesDiv.querySelector(".msg-row-bot.is-last");
+      if (lastBot) lastBot.remove();
+
+      ws.send(JSON.stringify({ type: "edit_message", content: newText }));
+      updateLastActions();
+    });
+
+    textarea.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeEdit();
+    });
+
+    textarea.addEventListener("input", () => {
+      textarea.style.height = "auto";
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
+    });
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(sendBtn);
+    editArea.appendChild(textarea);
+    editArea.appendChild(btnRow);
+    userRow.insertBefore(editArea, actionsBar);
+
+    // Auto-size and focus
+    requestAnimationFrame(() => {
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
+      textarea.focus();
     });
   }
 

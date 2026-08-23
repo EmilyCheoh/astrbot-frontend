@@ -164,6 +164,17 @@ class FrontendAdapter(Platform):
                     elif kind == "new_conversation" and authenticated:
                         await self._handle_new(ws)
 
+                    # --- Edit / Retry --------------------------------------
+                    elif kind == "retry" and authenticated:
+                        await self._handle_retry_or_edit(
+                            ws, data.get("content", ""),
+                        )
+
+                    elif kind == "edit_message" and authenticated:
+                        await self._handle_retry_or_edit(
+                            ws, data.get("content", ""),
+                        )
+
                     # --- Heartbeat -----------------------------------------
                     elif kind == "ping":
                         await ws.send_json({"type": "pong"})
@@ -336,6 +347,89 @@ class FrontendAdapter(Platform):
             })
         except Exception as exc:
             logger.warning(f"Failed to create conversation: {exc}")
+
+    # -- Retry / Edit --------------------------------------------------------
+
+    async def _handle_retry_or_edit(self, ws: web.WebSocketResponse, content: str):
+        """Handle retry or edit: truncate last exchange, re-fire message."""
+        if not content.strip():
+            await ws.send_json({"type": "status", "status": "idle"})
+            return
+
+        success = await self._truncate_last_exchange()
+        if not success:
+            logger.warning("Retry/edit failed: could not truncate history")
+            await ws.send_json({"type": "status", "status": "idle"})
+            return
+
+        # Re-fire as a normal message through the standard pipeline
+        await self._on_message(
+            {"content": content, "id": str(uuid.uuid4())}, ws,
+        )
+
+    async def _truncate_last_exchange(self) -> bool:
+        """Remove the last user+assistant exchange from conversation history.
+
+        Strips everything from the last user message onwards.  AstrBot's
+        pipeline will re-add the user message when the re-fired event
+        is processed.
+        """
+        try:
+            if not runtime.conversation_manager:
+                logger.warning("Conversation manager not available for truncation")
+                return False
+
+            cid = await runtime.conversation_manager.get_curr_conversation_id(
+                self._umo
+            )
+            if not cid:
+                logger.warning("No active conversation to truncate")
+                return False
+
+            db_path = self._find_db()
+            if not db_path:
+                return False
+
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            cursor = conn.execute(
+                "SELECT content FROM conversations WHERE conversation_id = ?",
+                (cid,),
+            )
+            row = cursor.fetchone()
+            conn.close()
+
+            if not row or not row[0]:
+                return False
+
+            history = json.loads(row[0])
+
+            # Walk backwards to find the last user message
+            last_user_idx = None
+            for i in range(len(history) - 1, -1, -1):
+                if history[i].get("role") == "user":
+                    last_user_idx = i
+                    break
+
+            if last_user_idx is None:
+                logger.warning("No user message found in history to truncate")
+                return False
+
+            # Truncate everything from the last user message onwards
+            truncated = history[:last_user_idx]
+
+            await runtime.conversation_manager.update_conversation(
+                self._umo, cid, history=truncated,
+            )
+
+            logger.info(
+                f"Truncated conversation {cid}: "
+                f"{len(history)} -> {len(truncated)} messages"
+            )
+            return True
+
+        except Exception as exc:
+            logger.warning(f"Failed to truncate last exchange: {exc}")
+            return False
 
     # -- Message handling ----------------------------------------------------
 

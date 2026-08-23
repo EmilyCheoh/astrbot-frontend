@@ -1,3 +1,8 @@
+V5
+edit + retry
+
+---
+
 V4
 * Add copy button under message bubbles
 * Change Enter key to not send — only send button sends

@@ -759,3 +759,136 @@ body {
   background: var(--border-subtle);
   border-radius: 2px;
 }
+
+
+/* ================================================================
+   Edit / Retry
+   ================================================================ */
+
+/* Hide edit/retry buttons by default — only show on last messages */
+.msg-action-btn.edit-btn,
+.msg-action-btn.retry-btn {
+  display: none;
+}
+
+.msg-row-user.is-last .msg-action-btn.edit-btn,
+.msg-row-bot.is-last .msg-action-btn.retry-btn {
+  display: flex;
+}
+
+/* ---- Inline edit area ---- */
+.edit-area {
+  width: 80%;
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-textarea {
+  width: 100%;
+  min-height: 48px;
+  max-height: 200px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.edit-textarea:focus {
+  border-color: var(--border-strong);
+}
+
+.edit-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.edit-cancel-btn,
+.edit-send-btn {
+  padding: 6px 16px;
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+  border: none;
+}
+
+.edit-cancel-btn {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.edit-cancel-btn:hover {
+  background: var(--border-subtle);
+}
+
+.edit-send-btn {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+}
+
+.edit-send-btn:hover {
+  opacity: 0.85;
+}
+
+/* ---- Retry confirmation bar ---- */
+.retry-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.retry-confirm-text {
+  font-size: 13px;
+  color: var(--text-supporting);
+}
+
+.retry-confirm-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.retry-confirm-cancel,
+.retry-confirm-ok {
+  padding: 4px 14px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.retry-confirm-cancel {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.retry-confirm-cancel:hover {
+  background: var(--border-subtle);
+}
+
+.retry-confirm-ok {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+}
+
+.retry-confirm-ok:hover {
+  opacity: 0.85;
+}
