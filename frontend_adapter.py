@@ -101,8 +101,16 @@ class FrontendAdapter(Platform):
 
     # -- Index handler -------------------------------------------------------
 
-    async def _index_handler(self, _request: web.Request) -> web.FileResponse:
-        return web.FileResponse(self._static_dir / "index.html")
+    async def _index_handler(self, _request: web.Request) -> web.Response:
+        html_path = self._static_dir / "index.html"
+        return web.Response(
+            body=html_path.read_bytes(),
+            content_type="text/html",
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+            },
+        )
 
     # -- WebSocket handler ---------------------------------------------------
 
