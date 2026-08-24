@@ -10,7 +10,7 @@
       display: none !important
     }
   </style>
-  <link rel="stylesheet" href="/static/style.css?v=20260823-2">
+  <link rel="stylesheet" href="/static/style.css?v=20260824-1">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
 </head>
@@ -35,6 +35,29 @@
       <div class="header-right">
         <button id="font-toggle" class="icon-btn" title="Font: serif">Aa</button>
         <button id="theme-toggle" class="icon-btn" title="Theme: auto"></button>
+        <div class="more-menu-wrapper">
+          <button id="more-menu-btn" class="icon-btn more-dots" title="More">&middot;&middot;&middot;</button>
+          <div id="more-menu" class="more-menu hidden">
+            <button id="export-md-btn" class="more-menu-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Export as Markdown
+            </button>
+            <a href="https://rl.littlebatcat.uk" target="_blank" rel="noopener" class="more-menu-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+              Go to Recursion Log
+            </a>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -42,8 +65,46 @@
     <div id="panel-overlay" class="panel-overlay hidden"></div>
     <aside id="conv-panel" class="conv-panel">
       <button id="new-conv-btn" class="new-conv-btn">+ New conversation</button>
+      <button id="search-btn" class="search-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        Search
+      </button>
       <div id="conv-list" class="conv-list"></div>
+      <div id="pagination" class="pagination"></div>
     </aside>
+
+    <!-- Search overlay -->
+    <div id="search-overlay" class="search-overlay hidden">
+      <div class="search-overlay-inner">
+        <div class="search-header">
+          <div class="search-input-row">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="text" id="search-input" placeholder="Search chats..." autocomplete="off">
+            <button id="search-close" class="search-close-btn">ESC</button>
+          </div>
+          <div class="search-mode-row">
+            <button class="search-mode-btn active" data-mode="title">Title</button>
+            <button class="search-mode-btn" data-mode="content">Content</button>
+            <button class="search-mode-btn" data-mode="date">Date</button>
+          </div>
+          <div id="search-date-inputs" class="search-date-inputs hidden">
+            <input type="date" id="search-date-from">
+            <span class="search-date-sep">to</span>
+            <input type="date" id="search-date-to">
+            <button id="search-date-apply" class="search-date-apply">Apply</button>
+          </div>
+        </div>
+        <div id="search-results" class="search-results"></div>
+      </div>
+    </div>
 
     <main class="chat-scroll" id="chat-scroll">
       <div id="messages" class="chat-content"></div>
@@ -71,7 +132,7 @@
     </footer>
   </div>
 
-  <script src="/static/app.js?v=20260823-2"></script>
+  <script src="/static/app.js?v=20260824-1"></script>
 </body>
 
 </html>

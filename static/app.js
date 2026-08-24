@@ -112,13 +112,42 @@
   const fileInput         = document.getElementById("file-input");
   const imgPreview        = document.getElementById("img-preview");
 
+  // New DOM refs
+  const searchBtn         = document.getElementById("search-btn");
+  const searchOverlay     = document.getElementById("search-overlay");
+  const searchInputEl     = document.getElementById("search-input");
+  const searchCloseBtn    = document.getElementById("search-close");
+  const searchResultsEl   = document.getElementById("search-results");
+  const searchDateInputs  = document.getElementById("search-date-inputs");
+  const searchDateFrom    = document.getElementById("search-date-from");
+  const searchDateTo      = document.getElementById("search-date-to");
+  const searchDateApply   = document.getElementById("search-date-apply");
+  const paginationEl      = document.getElementById("pagination");
+  const moreMenuBtn       = document.getElementById("more-menu-btn");
+  const moreMenu          = document.getElementById("more-menu");
+  const exportMdBtn       = document.getElementById("export-md-btn");
+
+  // ==================================================================
+  // State
+  // ==================================================================
+
   let ws = null;
   let savedToken = null;
   let reconnectDelay = 1000;
   let reconnecting = false;
-  let pendingImages = [];  // data URIs waiting to be sent
+  let pendingImages = [];
   let isProcessing = false;
   let batchRendering = false;
+
+  // New state
+  let currentMessages = [];
+  let isReadonly = false;
+  let currentConvTitle = "";
+  let currentPage = 1;
+  let pinnedIds = [];
+  let lastConvListData = null;
+  let searchDebounce = null;
+  let searchMode = "title";
 
   // ==================================================================
   // WebSocket connection
@@ -145,9 +174,7 @@
       }
     };
 
-    ws.onerror = () => {
-      // onclose fires after this — reconnection handled there
-    };
+    ws.onerror = () => {};
   }
 
   // ==================================================================
@@ -202,21 +229,44 @@
         break;
 
       case "history":
+        currentMessages = data.messages || [];
+        isReadonly = data.readonly || false;
         messagesDiv.innerHTML = "";
-        renderHistory(data.messages || []);
+        renderHistory(currentMessages);
+        setComposerReadonly(isReadonly);
         break;
 
       case "conversations_list":
-        renderConvList(data.conversations || []);
+        lastConvListData = data;
+        renderConvList(data);
         break;
 
       case "conversation_switched":
+        isReadonly = false;
+        setComposerReadonly(false);
         closePanel();
         break;
 
       case "conversation_created":
+        currentMessages = [];
+        isReadonly = false;
         messagesDiv.innerHTML = "";
+        setComposerReadonly(false);
         closePanel();
+        break;
+
+      case "search_results":
+        renderSearchResults(data.results || [], data.mode);
+        break;
+
+      case "pin_updated":
+        pinnedIds = data.pinned || [];
+        if (lastConvListData) {
+          for (const conv of lastConvListData.conversations) {
+            conv.pinned = pinnedIds.includes(conv.id);
+          }
+          renderConvList(lastConvListData);
+        }
         break;
     }
   }
@@ -276,6 +326,17 @@
     batchRendering = false;
     updateLastActions();
     scrollToBottom();
+
+    // Add read-only divider if needed
+    if (isReadonly) {
+      const existing = document.querySelector(".readonly-divider");
+      if (!existing) {
+        const divider = document.createElement("div");
+        divider.className = "readonly-divider";
+        divider.innerHTML = "<span>QQ \u00B7 read only</span>";
+        messagesDiv.appendChild(divider);
+      }
+    }
   }
 
   // ==================================================================
@@ -341,7 +402,6 @@
     const wrapper = document.createElement("div");
     wrapper.className = "msg-bot";
 
-    // Collect plain text from text segments for copy
     let plainText = "";
 
     for (const seg of segments) {
@@ -417,9 +477,8 @@
   }
 
   function handleRetryClick(botRow) {
-    if (isProcessing || !botRow.classList.contains("is-last")) return;
+    if (isProcessing || isReadonly || !botRow.classList.contains("is-last")) return;
 
-    // Remove any existing confirmation bar
     const existing = document.querySelector(".retry-confirm");
     if (existing) existing.remove();
 
@@ -444,13 +503,11 @@
   function handleRetry(botRow) {
     if (isProcessing || !ws || ws.readyState !== WebSocket.OPEN) return;
 
-    // Find the last user message text
     const lastUser = messagesDiv.querySelector(".msg-row-user.is-last");
     if (!lastUser) return;
     const userText = lastUser.dataset.text;
     if (!userText) return;
 
-    // Remove bot message from DOM
     botRow.remove();
     updateLastActions();
 
@@ -458,19 +515,16 @@
   }
 
   function handleEditClick(userRow) {
-    if (isProcessing || !userRow.classList.contains("is-last")) return;
-    // Prevent double-editing
+    if (isProcessing || isReadonly || !userRow.classList.contains("is-last")) return;
     if (userRow.querySelector(".edit-area")) return;
 
     const msgDiv = userRow.querySelector(".msg-user");
     const actionsBar = userRow.querySelector(".msg-actions");
     const originalText = userRow.dataset.text;
 
-    // Hide original content and actions
     msgDiv.classList.add("hidden");
     if (actionsBar) actionsBar.classList.add("hidden");
 
-    // Create edit UI
     const editArea = document.createElement("div");
     editArea.className = "edit-area";
 
@@ -485,9 +539,9 @@
     cancelBtn.className = "edit-cancel-btn";
     cancelBtn.textContent = "Cancel";
 
-    const sendBtn = document.createElement("button");
-    sendBtn.className = "edit-send-btn";
-    sendBtn.textContent = "Send";
+    const sendEditBtn = document.createElement("button");
+    sendEditBtn.className = "edit-send-btn";
+    sendEditBtn.textContent = "Send";
 
     function closeEdit() {
       editArea.remove();
@@ -497,18 +551,16 @@
 
     cancelBtn.addEventListener("click", closeEdit);
 
-    sendBtn.addEventListener("click", () => {
+    sendEditBtn.addEventListener("click", () => {
       const newText = textarea.value.trim();
       if (!newText || !ws || ws.readyState !== WebSocket.OPEN) return;
 
-      // Remove edit UI and update user message display
       editArea.remove();
       msgDiv.textContent = newText;
       msgDiv.classList.remove("hidden");
       userRow.dataset.text = newText;
       if (actionsBar) actionsBar.classList.remove("hidden");
 
-      // Remove the bot reply
       const lastBot = messagesDiv.querySelector(".msg-row-bot.is-last");
       if (lastBot) lastBot.remove();
 
@@ -526,12 +578,11 @@
     });
 
     btnRow.appendChild(cancelBtn);
-    btnRow.appendChild(sendBtn);
+    btnRow.appendChild(sendEditBtn);
     editArea.appendChild(textarea);
     editArea.appendChild(btnRow);
     userRow.insertBefore(editArea, actionsBar);
 
-    // Auto-size and focus
     requestAnimationFrame(() => {
       textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
       textarea.focus();
@@ -543,6 +594,7 @@
   // ==================================================================
 
   function sendMessage() {
+    if (isReadonly) return;
     const text = msgInput.value.trim();
     const images = pendingImages.slice();
     if ((!text && images.length === 0) || !ws || ws.readyState !== WebSocket.OPEN) return;
@@ -622,7 +674,7 @@
 
   function openPanel() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: "list_conversations" }));
+    ws.send(JSON.stringify({ type: "list_conversations", page: currentPage, limit: 20 }));
     convPanel.classList.add("open");
     panelOverlay.classList.remove("hidden");
     panelOverlay.classList.add("open");
@@ -631,7 +683,6 @@
   function closePanel() {
     convPanel.classList.remove("open");
     panelOverlay.classList.remove("open");
-    // Wait for slide-out transition, then hide overlay
     setTimeout(() => {
       if (!convPanel.classList.contains("open")) {
         panelOverlay.classList.add("hidden");
@@ -639,33 +690,122 @@
     }, 260);
   }
 
-  function renderConvList(conversations) {
+  function renderConvList(data) {
+    const { conversations, page, pages } = data;
     convList.innerHTML = "";
-    for (const conv of conversations) {
-      const btn = document.createElement("button");
-      btn.className = "conv-item" + (conv.active ? " active" : "");
 
-      const preview = document.createElement("div");
-      preview.className = "conv-item-preview";
-      preview.textContent = conv.preview || "(empty)";
+    if (!conversations || conversations.length === 0) {
+      convList.innerHTML = '<div class="conv-empty">No conversations</div>';
+      renderPagination(page || 1, pages || 1);
+      return;
+    }
 
-      const time = document.createElement("div");
-      time.className = "conv-item-time";
-      time.textContent = formatTime(conv.updated_at);
+    // Separate pinned and unpinned
+    const pinned = conversations.filter(c => c.pinned);
+    const unpinned = conversations.filter(c => !c.pinned);
 
-      btn.appendChild(preview);
-      btn.appendChild(time);
+    // Render pinned group
+    if (pinned.length > 0) {
+      const isExpanded = localStorage.getItem("den-pinned-expanded") !== "false";
 
-      btn.addEventListener("click", () => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const header = document.createElement("div");
+      header.className = "pinned-header";
+      header.innerHTML =
+        '<span class="pinned-arrow' + (isExpanded ? " expanded" : "") +
+        '">\u25B6</span> Favorites (' + pinned.length + ")";
+
+      const container = document.createElement("div");
+      container.className = "pinned-items" + (isExpanded ? " expanded" : "");
+
+      for (const conv of pinned) {
+        container.appendChild(createConvItem(conv));
+      }
+
+      header.addEventListener("click", () => {
+        const nowExpanded = container.classList.toggle("expanded");
+        header.querySelector(".pinned-arrow").classList.toggle("expanded");
+        localStorage.setItem("den-pinned-expanded", String(nowExpanded));
+      });
+
+      convList.appendChild(header);
+      convList.appendChild(container);
+    }
+
+    // Render unpinned
+    for (const conv of unpinned) {
+      convList.appendChild(createConvItem(conv));
+    }
+
+    renderPagination(page || 1, pages || 1);
+  }
+
+  function createConvItem(conv) {
+    const btn = document.createElement("button");
+    btn.className = "conv-item" + (conv.active ? " active" : "");
+    btn.dataset.id = conv.id;
+    btn.dataset.platform = conv.platform_id;
+
+    // Top row: preview + platform tag + pin
+    const topRow = document.createElement("div");
+    topRow.className = "conv-item-top";
+
+    const preview = document.createElement("div");
+    preview.className = "conv-item-preview";
+    preview.textContent = conv.preview || "(empty)";
+    topRow.appendChild(preview);
+
+    if (conv.platform_id === "Abyss") {
+      const tag = document.createElement("span");
+      tag.className = "platform-tag qq";
+      tag.textContent = "QQ";
+      topRow.appendChild(tag);
+    }
+
+    const pinBtn = document.createElement("button");
+    pinBtn.className = "conv-pin-btn" + (conv.pinned ? " pinned" : "");
+    pinBtn.title = conv.pinned ? "Unpin" : "Pin";
+    pinBtn.innerHTML = conv.pinned ? "\u25C6" : "\u25C7";
+    pinBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({
+        type: conv.pinned ? "unpin_conversation" : "pin_conversation",
+        conversation_id: conv.id,
+      }));
+    });
+    topRow.appendChild(pinBtn);
+
+    // Bottom row: timestamp
+    const time = document.createElement("div");
+    time.className = "conv-item-time";
+    time.textContent = formatTime(conv.updated_at);
+
+    btn.appendChild(topRow);
+    btn.appendChild(time);
+
+    btn.addEventListener("click", (e) => {
+      if (e.target.closest(".conv-pin-btn")) return;
+      currentConvTitle = conv.preview || "conversation";
+
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+      if (conv.platform_id === "Abyss") {
+        // QQ — view only, don't switch pointer
+        ws.send(JSON.stringify({
+          type: "view_history",
+          conversation_id: conv.id,
+        }));
+        closePanel();
+      } else {
+        // Den — switch conversation
         ws.send(JSON.stringify({
           type: "switch_conversation",
           conversation_id: conv.id,
         }));
-      });
+      }
+    });
 
-      convList.appendChild(btn);
-    }
+    return btn;
   }
 
   function formatTime(ts) {
@@ -681,6 +821,287 @@
     } catch {
       return ts;
     }
+  }
+
+  // ==================================================================
+  // Pagination
+  // ==================================================================
+
+  function renderPagination(page, pages) {
+    paginationEl.innerHTML = "";
+    if (pages <= 1) return;
+
+    currentPage = page;
+
+    const prev = document.createElement("button");
+    prev.className = "page-btn";
+    prev.textContent = "\u2039";
+    prev.disabled = page <= 1;
+    prev.addEventListener("click", () => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: "list_conversations", page: page - 1, limit: 20 }));
+    });
+
+    const info = document.createElement("span");
+    info.className = "page-info";
+    info.textContent = page + " / " + pages;
+
+    const next = document.createElement("button");
+    next.className = "page-btn";
+    next.textContent = "\u203A";
+    next.disabled = page >= pages;
+    next.addEventListener("click", () => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: "list_conversations", page: page + 1, limit: 20 }));
+    });
+
+    paginationEl.append(prev, info, next);
+  }
+
+  // ==================================================================
+  // Search overlay
+  // ==================================================================
+
+  function openSearch() {
+    closePanel();
+    searchOverlay.classList.remove("hidden");
+    searchInputEl.value = "";
+    searchResultsEl.innerHTML = "";
+    setSearchMode("title");
+    requestAnimationFrame(() => searchInputEl.focus());
+  }
+
+  function closeSearch() {
+    searchOverlay.classList.add("hidden");
+    searchInputEl.value = "";
+    searchResultsEl.innerHTML = "";
+  }
+
+  function doSearch() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    if (searchMode === "date") {
+      const from = searchDateFrom.value;
+      const to = searchDateTo.value;
+      if (from && to) {
+        ws.send(JSON.stringify({
+          type: "search_conversations",
+          mode: "date",
+          date_from: from,
+          date_to: to,
+        }));
+      }
+      return;
+    }
+
+    const q = searchInputEl.value.trim();
+    if (!q) {
+      searchResultsEl.innerHTML = "";
+      return;
+    }
+    ws.send(JSON.stringify({
+      type: "search_conversations",
+      mode: searchMode,
+      q: q,
+    }));
+  }
+
+  function setSearchMode(mode) {
+    searchMode = mode;
+    document.querySelectorAll(".search-mode-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.mode === mode);
+    });
+
+    if (mode === "date") {
+      searchInputEl.classList.add("hidden");
+      searchDateInputs.classList.remove("hidden");
+    } else {
+      searchInputEl.classList.remove("hidden");
+      searchDateInputs.classList.add("hidden");
+      searchInputEl.placeholder = mode === "title" ? "Search titles..." : "Search content...";
+      searchInputEl.focus();
+    }
+
+    searchResultsEl.innerHTML = "";
+  }
+
+  function renderSearchResults(results) {
+    searchResultsEl.innerHTML = "";
+
+    if (results.length === 0) {
+      searchResultsEl.innerHTML = '<div class="search-empty">No results found</div>';
+      return;
+    }
+
+    for (const r of results) {
+      const item = document.createElement("button");
+      item.className = "search-result-item";
+
+      const topRow = document.createElement("div");
+      topRow.className = "search-result-top";
+
+      const preview = document.createElement("div");
+      preview.className = "search-result-preview";
+      preview.textContent = r.preview || "(empty)";
+      topRow.appendChild(preview);
+
+      if (r.platform_id === "Abyss") {
+        const tag = document.createElement("span");
+        tag.className = "platform-tag qq";
+        tag.textContent = "QQ";
+        topRow.appendChild(tag);
+      }
+
+      item.appendChild(topRow);
+
+      if (r.snippet) {
+        const snippet = document.createElement("div");
+        snippet.className = "search-result-snippet";
+        snippet.textContent = r.snippet;
+        item.appendChild(snippet);
+      }
+
+      const time = document.createElement("div");
+      time.className = "search-result-time";
+      time.textContent = formatTime(r.updated_at);
+      item.appendChild(time);
+
+      item.addEventListener("click", () => {
+        currentConvTitle = r.preview || "conversation";
+        closeSearch();
+
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+        if (r.platform_id === "Abyss") {
+          ws.send(JSON.stringify({
+            type: "view_history",
+            conversation_id: r.id,
+          }));
+        } else {
+          ws.send(JSON.stringify({
+            type: "switch_conversation",
+            conversation_id: r.id,
+          }));
+        }
+      });
+
+      searchResultsEl.appendChild(item);
+    }
+  }
+
+  // ==================================================================
+  // Read-only mode
+  // ==================================================================
+
+  function setComposerReadonly(readonly) {
+    isReadonly = readonly;
+    const composer = document.querySelector(".composer");
+    const existing = document.querySelector(".readonly-divider");
+
+    if (readonly) {
+      msgInput.disabled = true;
+      msgInput.placeholder = "QQ conversation \u00B7 read only";
+      sendBtn.disabled = true;
+      attachBtn.disabled = true;
+      if (composer) composer.classList.add("composer-readonly");
+    } else {
+      msgInput.disabled = false;
+      msgInput.placeholder = "Talk to me...";
+      sendBtn.disabled = false;
+      attachBtn.disabled = false;
+      if (composer) composer.classList.remove("composer-readonly");
+      if (existing) existing.remove();
+    }
+  }
+
+  // ==================================================================
+  // Overflow menu
+  // ==================================================================
+
+  function toggleMoreMenu() {
+    moreMenu.classList.toggle("hidden");
+  }
+
+  function closeMoreMenu() {
+    moreMenu.classList.add("hidden");
+  }
+
+  // ==================================================================
+  // Export as Markdown
+  // ==================================================================
+
+  function exportMarkdown() {
+    if (!currentMessages.length) return;
+
+    let md = "";
+
+    for (const msg of currentMessages) {
+      const role = msg.role || "system";
+
+      if (role === "tool") {
+        const resultText = typeof msg.content === "string"
+          ? msg.content
+          : JSON.stringify(msg.content, null, 2);
+        md += "<details><summary>\u2192 result</summary>\n\n```\n" + resultText + "\n```\n\n</details>\n\n---\n\n";
+        continue;
+      }
+
+      const prefix = role === "user" ? "**User:**"
+        : role === "assistant" ? "**Assistant:**"
+        : "**" + role + ":**";
+
+      let text = "";
+      if (Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.type === "thinking" || block.type === "think") {
+            const thinkText = block.thinking || block.think || block.text || block.content || "";
+            text += "<details><summary>thinking</summary>\n\n" + thinkText + "\n\n</details>\n\n";
+          } else if (block.type === "text") {
+            text += block.text || block.content || "";
+          } else if (typeof block === "string") {
+            text += block;
+          } else {
+            text += block.text || block.content || JSON.stringify(block);
+          }
+        }
+      } else {
+        text = typeof msg.content === "string"
+          ? msg.content
+          : JSON.stringify(msg.content);
+      }
+
+      // Strip timestamp tags
+      text = text.replace(TIMESTAMP_TAG_RE, "").trim();
+
+      // Append tool_calls
+      if (role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
+        for (const tc of msg.tool_calls) {
+          const fn = tc.function || {};
+          let args = fn.arguments || "";
+          if (typeof args === "string") {
+            try { args = JSON.stringify(JSON.parse(args), null, 2); } catch {}
+          } else {
+            args = JSON.stringify(args, null, 2);
+          }
+          text += "\n\n<details><summary>\u26A1 " + (fn.name || "tool call") + "</summary>\n\n```\n" + args + "\n```\n\n</details>";
+        }
+      }
+
+      md += prefix + "\n\n" + text.trim() + "\n\n---\n\n";
+    }
+
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const safeName = (currentConvTitle || "conversation").slice(0, 50).replace(/[/\\?%*:|"<>]/g, "_");
+    a.download = safeName + ".md";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    closeMoreMenu();
   }
 
   // ==================================================================
@@ -724,6 +1145,53 @@
     if (imageFiles.length > 0) {
       e.preventDefault();
       addImages(imageFiles);
+    }
+  });
+
+  // Search overlay
+  searchBtn.addEventListener("click", openSearch);
+  searchCloseBtn.addEventListener("click", closeSearch);
+
+  searchInputEl.addEventListener("input", () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(doSearch, 300);
+  });
+
+  searchInputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeSearch();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      clearTimeout(searchDebounce);
+      doSearch();
+    }
+  });
+
+  document.querySelectorAll(".search-mode-btn").forEach(btn => {
+    btn.addEventListener("click", () => setSearchMode(btn.dataset.mode));
+  });
+
+  searchDateApply.addEventListener("click", doSearch);
+
+  // Overflow menu
+  moreMenuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleMoreMenu();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".more-menu-wrapper")) {
+      closeMoreMenu();
+    }
+  });
+
+  exportMdBtn.addEventListener("click", exportMarkdown);
+
+  // Global ESC
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (!searchOverlay.classList.contains("hidden")) {
+        closeSearch();
+      }
     }
   });
 })();

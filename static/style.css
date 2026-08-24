@@ -735,6 +735,8 @@ body {
 }
 
 .conv-item-preview {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: var(--text-primary);
   white-space: nowrap;
@@ -891,4 +893,533 @@ body {
 
 .retry-confirm-ok:hover {
   opacity: 0.85;
+}
+
+
+/* ================================================================
+   Conversation panel — search button
+   ================================================================ */
+
+.search-btn {
+  margin: 0 12px 8px;
+  padding: 9px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 24px);
+}
+
+.search-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+.search-btn svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+
+/* ================================================================
+   Conversation item — top row (preview + tag + pin)
+   ================================================================ */
+
+.conv-item-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+
+/* ================================================================
+   Platform tag
+   ================================================================ */
+
+.platform-tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.platform-tag.qq {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+
+/* ================================================================
+   Pin button
+   ================================================================ */
+
+.conv-pin-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-placeholder);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+
+.conv-item:hover .conv-pin-btn {
+  opacity: 1;
+}
+
+.conv-pin-btn.pinned {
+  opacity: 1;
+  color: var(--text-supporting);
+}
+
+.conv-pin-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* On touch devices always show pinned state */
+@media (hover: none) {
+  .conv-pin-btn.pinned {
+    opacity: 1;
+  }
+}
+
+
+/* ================================================================
+   Pinned group
+   ================================================================ */
+
+.pinned-header {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.3px;
+}
+
+.pinned-header:hover {
+  color: var(--text-supporting);
+}
+
+.pinned-arrow {
+  font-size: 8px;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+
+.pinned-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.pinned-items {
+  display: none;
+}
+
+.pinned-items.expanded {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+
+/* ================================================================
+   Pagination
+   ================================================================ */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px 4px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: auto;
+}
+
+.pagination:empty {
+  display: none;
+}
+
+.page-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 0.12s, color 0.12s;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.page-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.page-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.conv-empty {
+  padding: 20px 12px;
+  text-align: center;
+  color: var(--text-placeholder);
+  font-size: 13px;
+}
+
+
+/* ================================================================
+   Search overlay
+   ================================================================ */
+
+.search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+.search-overlay-inner {
+  width: min(100%, 560px);
+  margin: 0 auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.search-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card);
+  transition: border-color 0.15s;
+}
+
+.search-input-row:focus-within {
+  border-color: var(--border-strong);
+}
+
+.search-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.search-input-row input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.search-input-row input::placeholder {
+  color: var(--text-placeholder);
+}
+
+.search-close-btn {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: background 0.12s;
+}
+
+.search-close-btn:hover {
+  background: var(--bg-hover);
+}
+
+.search-mode-row {
+  display: flex;
+  gap: 4px;
+}
+
+.search-mode-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.search-mode-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.search-mode-btn.active {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+.search-date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.search-date-inputs input[type="date"] {
+  padding: 6px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.search-date-inputs input[type="date"]:focus {
+  border-color: var(--border-strong);
+}
+
+.search-date-sep {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.search-date-apply {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.search-date-apply:hover {
+  opacity: 0.85;
+}
+
+.search-results {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-results::-webkit-scrollbar { width: 4px; }
+.search-results::-webkit-scrollbar-track { background: transparent; }
+.search-results::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 2px;
+}
+
+.search-result-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: background 0.12s;
+}
+
+.search-result-item:hover {
+  background: var(--bg-hover);
+}
+
+.search-result-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-result-preview {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.search-result-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.search-result-snippet {
+  font-size: 12px;
+  color: var(--text-supporting);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--text-placeholder);
+  font-size: 13px;
+}
+
+
+/* ================================================================
+   Overflow menu (···)
+   ================================================================ */
+
+.more-menu-wrapper {
+  position: relative;
+}
+
+.more-dots {
+  font-size: 16px;
+  letter-spacing: 1.5px;
+}
+
+.more-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 200px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  z-index: 50;
+}
+
+[data-theme="dark"] .more-menu {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.more-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s;
+  text-decoration: none;
+}
+
+.more-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.more-menu-item svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+
+/* ================================================================
+   Read-only mode
+   ================================================================ */
+
+.composer-readonly {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.readonly-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 0 4px;
+  margin-top: 12px;
+}
+
+.readonly-divider::before,
+.readonly-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.readonly-divider span {
+  padding: 0 14px;
+  font-size: 11px;
+  color: var(--text-placeholder);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
 }
