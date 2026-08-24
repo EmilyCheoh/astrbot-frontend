@@ -999,7 +999,7 @@
 
     if (readonly) {
       msgInput.disabled = true;
-      msgInput.placeholder = "QQ conversation \u00B7 read only";
+      msgInput.placeholder = "";
       sendBtn.disabled = true;
       attachBtn.disabled = true;
       if (composer) composer.classList.add("composer-readonly");
