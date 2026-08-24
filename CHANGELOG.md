@@ -4,6 +4,8 @@ integrated Log Viewer
 
 + optimized search UI
 
++ optimized sidebar UI + rename /delete function
+
 ---
 
 V5

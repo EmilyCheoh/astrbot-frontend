@@ -185,6 +185,20 @@ class FrontendAdapter(Platform):
                         if cid:
                             await self._handle_unpin(ws, cid)
 
+                    # --- Rename / Delete -----------------------------------
+                    elif kind == "rename_conversation" and authenticated:
+                        cid = data.get("conversation_id")
+                        title = data.get("title", "")
+                        pid = data.get("platform_id", "")
+                        if cid and title is not None:
+                            await self._handle_rename(ws, cid, title.strip(), pid)
+
+                    elif kind == "delete_conversation" and authenticated:
+                        cid = data.get("conversation_id")
+                        pid = data.get("platform_id", "")
+                        if cid:
+                            await self._handle_delete(ws, cid, pid)
+
                     # --- Edit / Retry --------------------------------------
                     elif kind == "retry" and authenticated:
                         await self._handle_retry_or_edit(
@@ -600,6 +614,54 @@ class FrontendAdapter(Platform):
             pins.remove(conversation_id)
             self._save_pins(pins)
         await ws.send_json({"type": "pin_updated", "pinned": pins})
+
+    # -- Rename / Delete -------------------------------------------------------
+
+    def _resolve_umo(self, platform_id: str) -> str:
+        """Resolve the UMO for a given platform_id."""
+        if platform_id == "Abyss":
+            return "Abyss:FriendMessage:396070723"
+        return self._umo
+
+    async def _handle_rename(self, ws: web.WebSocketResponse, conversation_id: str, title: str, platform_id: str):
+        """Rename a conversation's title."""
+        try:
+            if not runtime.conversation_manager:
+                logger.warning("Conversation manager not available for rename")
+                return
+            umo = self._resolve_umo(platform_id)
+            await runtime.conversation_manager.update_conversation(
+                umo, conversation_id, title=title,
+            )
+            await ws.send_json({
+                "type": "conversation_renamed",
+                "conversation_id": conversation_id,
+                "title": title,
+            })
+        except Exception as exc:
+            logger.warning(f"Failed to rename conversation: {exc}")
+
+    async def _handle_delete(self, ws: web.WebSocketResponse, conversation_id: str, platform_id: str):
+        """Delete a conversation permanently."""
+        try:
+            if not runtime.conversation_manager:
+                logger.warning("Conversation manager not available for delete")
+                return
+            umo = self._resolve_umo(platform_id)
+            await runtime.conversation_manager.delete_conversation(
+                umo, conversation_id,
+            )
+            # Remove from pins if pinned
+            pins = self._load_pins()
+            if conversation_id in pins:
+                pins.remove(conversation_id)
+                self._save_pins(pins)
+            await ws.send_json({
+                "type": "conversation_deleted",
+                "conversation_id": conversation_id,
+            })
+        except Exception as exc:
+            logger.warning(f"Failed to delete conversation: {exc}")
 
     # -- Retry / Edit --------------------------------------------------------
 

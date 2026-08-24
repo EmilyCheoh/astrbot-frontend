@@ -267,6 +267,32 @@
           renderConvList(lastConvListData);
         }
         break;
+
+      case "conversation_renamed":
+        if (lastConvListData) {
+          const rc = lastConvListData.conversations.find(c => c.id === data.conversation_id);
+          if (rc) {
+            rc.preview = data.title || "(empty)";
+            renderConvList(lastConvListData);
+          }
+        }
+        break;
+
+      case "conversation_deleted":
+        if (lastConvListData) {
+          const dc = lastConvListData.conversations.find(
+            c => c.id === data.conversation_id && c.active
+          );
+          lastConvListData.conversations = lastConvListData.conversations.filter(
+            c => c.id !== data.conversation_id
+          );
+          lastConvListData.total = Math.max(0, lastConvListData.total - 1);
+          renderConvList(lastConvListData);
+          if (dc && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "new_conversation" }));
+          }
+        }
+        break;
     }
   }
 
@@ -761,19 +787,14 @@
       topRow.appendChild(tag);
     }
 
-    const pinBtn = document.createElement("button");
-    pinBtn.className = "conv-pin-btn" + (conv.pinned ? " pinned" : "");
-    pinBtn.title = conv.pinned ? "Unpin" : "Pin";
-    pinBtn.innerHTML = conv.pinned ? "\u25C6" : "\u25C7";
-    pinBtn.addEventListener("click", (e) => {
+    const menuBtn = document.createElement("button");
+    menuBtn.className = "conv-menu-btn";
+    menuBtn.innerHTML = "\u22EE";
+    menuBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      ws.send(JSON.stringify({
-        type: conv.pinned ? "unpin_conversation" : "pin_conversation",
-        conversation_id: conv.id,
-      }));
+      toggleConvMenu(menuBtn, conv);
     });
-    topRow.appendChild(pinBtn);
+    topRow.appendChild(menuBtn);
 
     // Bottom row: timestamp
     const time = document.createElement("div");
@@ -784,7 +805,7 @@
     btn.appendChild(time);
 
     btn.addEventListener("click", (e) => {
-      if (e.target.closest(".conv-pin-btn")) return;
+      if (e.target.closest(".conv-menu-btn")) return;
       currentConvTitle = conv.preview || "conversation";
 
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -822,6 +843,202 @@
       return ts;
     }
   }
+
+  // ==================================================================
+  // Conversation context menu
+  // ==================================================================
+
+  const ICON_STAR = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+  const ICON_STAR_FILLED = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+  const ICON_RENAME = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+  const ICON_TRASH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+
+  let activeConvMenu = null;
+
+  function toggleConvMenu(anchorEl, conv) {
+    // If menu already open for this button, close it
+    if (activeConvMenu && activeConvMenu.anchor === anchorEl) {
+      closeConvMenu();
+      return;
+    }
+    closeConvMenu();
+
+    const rect = anchorEl.getBoundingClientRect();
+    const menu = document.createElement("div");
+    menu.className = "conv-menu";
+
+    // Star
+    const starItem = document.createElement("button");
+    starItem.className = "conv-menu-item";
+    starItem.innerHTML = (conv.pinned ? ICON_STAR_FILLED : ICON_STAR) + " " + (conv.pinned ? "Unstar" : "Star");
+    starItem.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({
+        type: conv.pinned ? "unpin_conversation" : "pin_conversation",
+        conversation_id: conv.id,
+      }));
+      closeConvMenu();
+    });
+    menu.appendChild(starItem);
+
+    // Rename
+    const renameItem = document.createElement("button");
+    renameItem.className = "conv-menu-item";
+    renameItem.innerHTML = ICON_RENAME + " Rename";
+    renameItem.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const convEl = anchorEl.closest(".conv-item");
+      startRename(conv, convEl);
+    });
+    menu.appendChild(renameItem);
+
+    // Separator
+    const sep = document.createElement("div");
+    sep.className = "conv-menu-separator";
+    menu.appendChild(sep);
+
+    // Delete
+    const deleteItem = document.createElement("button");
+    deleteItem.className = "conv-menu-item danger";
+    deleteItem.innerHTML = ICON_TRASH + " Delete";
+    deleteItem.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeConvMenu();
+      showDeleteDialog(conv);
+    });
+    menu.appendChild(deleteItem);
+
+    document.body.appendChild(menu);
+
+    // Position: right-aligned to button, below it
+    const menuW = menu.offsetWidth;
+    let left = rect.right - menuW;
+    let top = rect.bottom + 4;
+
+    // Keep within viewport
+    if (left < 4) left = 4;
+    if (top + menu.offsetHeight > window.innerHeight - 4) {
+      top = rect.top - menu.offsetHeight - 4;
+    }
+
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
+
+    activeConvMenu = { el: menu, anchor: anchorEl };
+  }
+
+  function closeConvMenu() {
+    if (activeConvMenu) {
+      activeConvMenu.el.remove();
+      activeConvMenu = null;
+    }
+  }
+
+  function startRename(conv, convItemEl) {
+    closeConvMenu();
+    const previewEl = convItemEl.querySelector(".conv-item-preview");
+    if (!previewEl) return;
+    const originalText = previewEl.textContent;
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "conv-rename-input";
+    input.value = conv.preview !== "(empty)" ? conv.preview : "";
+
+    previewEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    function finishRename(save) {
+      if (finished) return;
+      finished = true;
+      const newTitle = input.value.trim();
+      const newPreview = document.createElement("div");
+      newPreview.className = "conv-item-preview";
+
+      if (save && newTitle && newTitle !== originalText) {
+        newPreview.textContent = newTitle;
+        input.replaceWith(newPreview);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: "rename_conversation",
+            conversation_id: conv.id,
+            title: newTitle,
+            platform_id: conv.platform_id,
+          }));
+        }
+      } else {
+        newPreview.textContent = originalText;
+        input.replaceWith(newPreview);
+      }
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); finishRename(true); }
+      if (e.key === "Escape") { finishRename(false); }
+    });
+    input.addEventListener("blur", () => finishRename(false));
+  }
+
+  function showDeleteDialog(conv) {
+    closeDeleteDialog();
+    const overlay = document.createElement("div");
+    overlay.className = "delete-dialog-overlay";
+    overlay.id = "delete-dialog-overlay";
+
+    const dialog = document.createElement("div");
+    dialog.className = "delete-dialog";
+
+    const title = document.createElement("h3");
+    title.textContent = "Delete Conversation";
+
+    const body = document.createElement("p");
+    const convTitle = conv.preview && conv.preview !== "(empty)" ? conv.preview : "this conversation";
+    body.textContent = 'Are you sure you want to delete "' + convTitle + '"?';
+
+    const btns = document.createElement("div");
+    btns.className = "delete-dialog-btns";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "delete-dialog-cancel";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", closeDeleteDialog);
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.className = "delete-dialog-confirm";
+    confirmBtn.textContent = "Delete";
+    confirmBtn.addEventListener("click", () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: "delete_conversation",
+          conversation_id: conv.id,
+          platform_id: conv.platform_id,
+        }));
+      }
+      closeDeleteDialog();
+    });
+
+    btns.appendChild(cancelBtn);
+    btns.appendChild(confirmBtn);
+    dialog.appendChild(title);
+    dialog.appendChild(body);
+    dialog.appendChild(btns);
+    overlay.appendChild(dialog);
+
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) closeDeleteDialog();
+    });
+
+    document.body.appendChild(overlay);
+  }
+
+  function closeDeleteDialog() {
+    const existing = document.getElementById("delete-dialog-overlay");
+    if (existing) existing.remove();
+  }
+
 
   // ==================================================================
   // Pagination
@@ -1178,6 +1395,9 @@
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".more-menu-wrapper")) {
       closeMoreMenu();
+    }
+    if (!e.target.closest(".conv-menu") && !e.target.closest(".conv-menu-btn")) {
+      closeConvMenu();
     }
   });
 

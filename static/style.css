@@ -964,13 +964,13 @@ body {
 
 
 /* ================================================================
-   Pin button
+   Conversation context menu (three-dot)
    ================================================================ */
 
-.conv-pin-btn {
+.conv-menu-btn {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -979,40 +979,180 @@ body {
   background: transparent;
   color: var(--text-placeholder);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 14px;
   padding: 0;
   opacity: 0;
   transition: opacity 0.12s, color 0.12s, background 0.12s;
 }
 
-.conv-item:hover .conv-pin-btn {
+.conv-item:hover .conv-menu-btn {
   opacity: 1;
 }
 
-.conv-pin-btn.pinned {
-  opacity: 1;
-  color: var(--text-supporting);
-}
-
-.conv-pin-btn:hover {
+.conv-menu-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
-/* On touch devices always show pinned state */
 @media (hover: none) {
-  .conv-pin-btn.pinned {
+  .conv-menu-btn {
     opacity: 1;
   }
 }
 
-/* Larger pin target on desktop */
-@media (hover: hover) and (pointer: fine) {
-  .conv-pin-btn {
-    width: 28px;
-    height: 28px;
-    font-size: 14px;
-  }
+.conv-menu {
+  position: fixed;
+  min-width: 160px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  z-index: 150;
+}
+
+[data-theme="dark"] .conv-menu {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.conv-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s;
+  text-align: left;
+}
+
+.conv-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.conv-menu-item svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.conv-menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border-subtle);
+}
+
+.conv-menu-item.danger {
+  color: #c0392b;
+}
+
+.conv-menu-item.danger svg {
+  color: #c0392b;
+}
+
+.conv-menu-item.danger:hover {
+  background: #fdf0ef;
+}
+
+[data-theme="dark"] .conv-menu-item.danger:hover {
+  background: #3a2020;
+}
+
+/* Rename inline input */
+.conv-rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+/* Delete confirmation dialog */
+.delete-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+[data-theme="dark"] .delete-dialog-overlay {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.delete-dialog {
+  width: min(90vw, 400px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="dark"] .delete-dialog {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.delete-dialog h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.delete-dialog p {
+  font-size: 14px;
+  color: var(--text-supporting);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.delete-dialog-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.delete-dialog-cancel,
+.delete-dialog-confirm {
+  padding: 8px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.delete-dialog-cancel {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.delete-dialog-cancel:hover {
+  background: var(--border-subtle);
+}
+
+.delete-dialog-confirm {
+  background: #c0392b;
+  color: #fff;
+}
+
+.delete-dialog-confirm:hover {
+  opacity: 0.9;
 }
 
 
