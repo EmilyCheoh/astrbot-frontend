@@ -10,7 +10,7 @@
       display: none !important
     }
   </style>
-  <link rel="stylesheet" href="/static/style.css?v=20260824-1">
+  <link rel="stylesheet" href="/static/style.css?v=20260824-2">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
 </head>
@@ -81,24 +81,25 @@
     <div id="search-overlay" class="search-overlay hidden">
       <div class="search-overlay-inner">
         <div class="search-header">
-          <div class="search-input-row">
-            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input type="text" id="search-input" placeholder="Search chats..." autocomplete="off">
-            <button id="search-close" class="search-close-btn">ESC</button>
-          </div>
           <div class="search-mode-row">
             <button class="search-mode-btn active" data-mode="title">Title</button>
             <button class="search-mode-btn" data-mode="content">Content</button>
             <button class="search-mode-btn" data-mode="date">Date</button>
           </div>
+          <div id="search-input-row" class="search-input-row">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="text" id="search-input" placeholder="Search titles..." autocomplete="off">
+          </div>
           <div id="search-date-inputs" class="search-date-inputs hidden">
-            <input type="date" id="search-date-from">
-            <span class="search-date-sep">to</span>
-            <input type="date" id="search-date-to">
+            <div class="search-date-row">
+              <input type="date" id="search-date-from">
+              <span class="search-date-sep">&ndash;</span>
+              <input type="date" id="search-date-to">
+            </div>
             <button id="search-date-apply" class="search-date-apply">Apply</button>
           </div>
         </div>
@@ -132,7 +133,7 @@
     </footer>
   </div>
 
-  <script src="/static/app.js?v=20260824-1"></script>
+  <script src="/static/app.js?v=20260824-2"></script>
 </body>
 
 </html>

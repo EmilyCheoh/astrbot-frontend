@@ -2,6 +2,8 @@ V6
 
 integrated Log Viewer
 
++ optimized search UI
+
 ---
 
 V5

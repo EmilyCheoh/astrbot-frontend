@@ -116,7 +116,7 @@
   const searchBtn         = document.getElementById("search-btn");
   const searchOverlay     = document.getElementById("search-overlay");
   const searchInputEl     = document.getElementById("search-input");
-  const searchCloseBtn    = document.getElementById("search-close");
+  const searchInputRow    = document.getElementById("search-input-row");
   const searchResultsEl   = document.getElementById("search-results");
   const searchDateInputs  = document.getElementById("search-date-inputs");
   const searchDateFrom    = document.getElementById("search-date-from");
@@ -146,7 +146,6 @@
   let currentPage = 1;
   let pinnedIds = [];
   let lastConvListData = null;
-  let searchDebounce = null;
   let searchMode = "title";
 
   // ==================================================================
@@ -913,10 +912,10 @@
     });
 
     if (mode === "date") {
-      searchInputEl.classList.add("hidden");
+      searchInputRow.classList.add("hidden");
       searchDateInputs.classList.remove("hidden");
     } else {
-      searchInputEl.classList.remove("hidden");
+      searchInputRow.classList.remove("hidden");
       searchDateInputs.classList.add("hidden");
       searchInputEl.placeholder = mode === "title" ? "Search titles..." : "Search content...";
       searchInputEl.focus();
@@ -1150,18 +1149,15 @@
 
   // Search overlay
   searchBtn.addEventListener("click", openSearch);
-  searchCloseBtn.addEventListener("click", closeSearch);
 
-  searchInputEl.addEventListener("input", () => {
-    clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(doSearch, 300);
+  searchOverlay.addEventListener("click", (e) => {
+    if (e.target === searchOverlay) closeSearch();
   });
 
   searchInputEl.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeSearch();
     if (e.key === "Enter") {
       e.preventDefault();
-      clearTimeout(searchDebounce);
       doSearch();
     }
   });
