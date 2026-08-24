@@ -469,6 +469,7 @@
   function updateLastActions() {
     messagesDiv.querySelectorAll(".msg-row-user.is-last, .msg-row-bot.is-last")
       .forEach((el) => el.classList.remove("is-last"));
+    if (isReadonly) return;
     const users = messagesDiv.querySelectorAll(".msg-row-user");
     const bots = messagesDiv.querySelectorAll(".msg-row-bot");
     if (users.length) users[users.length - 1].classList.add("is-last");
