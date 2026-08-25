@@ -1,3 +1,9 @@
+V7
+
+show tool call
+
+---
+
 V6
 
 integrated Log Viewer

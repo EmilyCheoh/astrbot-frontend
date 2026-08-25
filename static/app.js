@@ -221,11 +221,19 @@
         }
         break;
 
-      case "message":
-        isProcessing = false;
-        thinkingIndicator.classList.add("hidden");
-        appendBot(data.segments || []);
+      case "message": {
+        const segs = data.segments || [];
+        // Only clear thinking indicator for messages with actual content
+        // (intermediate reasoning / tool_call messages keep the dots alive)
+        const isIntermediate = segs.length > 0
+          && segs.every(s => s.type === "reasoning" || s.type === "tool_call");
+        if (!isIntermediate) {
+          isProcessing = false;
+          thinkingIndicator.classList.add("hidden");
+        }
+        if (segs.length > 0) appendBot(segs);
         break;
+      }
 
       case "history":
         currentMessages = data.messages || [];
@@ -302,10 +310,27 @@
 
   const TIMESTAMP_TAG_RE = /<(?:current_)?date_and_time>[\s\S]*?<\/(?:current_)?date_and_time>\s*$/;
 
+  function formatToolArgs(argsStr) {
+    if (!argsStr) return "";
+    try {
+      const parsed = typeof argsStr === "string" ? JSON.parse(argsStr) : argsStr;
+      const keys = Object.keys(parsed);
+      // Single string field (e.g. {"code": "..."}) — unwrap to just the value
+      if (keys.length === 1 && typeof parsed[keys[0]] === "string") {
+        return parsed[keys[0]];
+      }
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return argsStr;
+    }
+  }
+
   function renderHistory(messages) {
     batchRendering = true;
-    for (const msg of messages) {
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
       const role = msg.role || "system";
+      // tool messages are consumed by the assistant tool_calls handler below
       if (role === "tool" || role === "system") continue;
 
       let text = "";
@@ -330,15 +355,36 @@
       // Strip AstrBot timestamp injection from user messages
       text = text.replace(TIMESTAMP_TAG_RE, "").trim();
 
-      if (!text && !thinkText.trim()) continue;
-
       if (role === "user") {
-        appendUser(text);
+        if (text) appendUser(text);
       } else if (role === "assistant") {
         const segments = [];
         if (thinkText.trim()) {
           segments.push({ type: "reasoning", data: thinkText.trim() });
         }
+
+        // Parse tool_calls — look ahead for matching tool results
+        if (msg.tool_calls && msg.tool_calls.length > 0) {
+          for (const tc of msg.tool_calls) {
+            const fn = tc.function || {};
+            const toolId = tc.id;
+            let resultContent = "";
+            for (let j = i + 1; j < messages.length; j++) {
+              if (messages[j].role === "tool" && messages[j].tool_call_id === toolId) {
+                const rc = messages[j].content;
+                resultContent = typeof rc === "string" ? rc : JSON.stringify(rc, null, 2);
+                break;
+              }
+            }
+            segments.push({
+              type: "tool_call",
+              name: fn.name || "tool call",
+              args: formatToolArgs(fn.arguments || ""),
+              result: resultContent,
+            });
+          }
+        }
+
         if (text) {
           segments.push({ type: "text", data: text });
         }
@@ -465,6 +511,36 @@
           details.appendChild(summary);
           details.appendChild(body);
           wrapper.appendChild(details);
+          break;
+        }
+
+        case "tool_call": {
+          const tcDetails = document.createElement("details");
+          tcDetails.className = "tool-call-block";
+          const tcSummary = document.createElement("summary");
+          tcSummary.textContent = seg.name || "tool call";
+          tcDetails.appendChild(tcSummary);
+
+          if (seg.args) {
+            const argsCode = document.createElement("pre");
+            argsCode.className = "tool-call-args";
+            argsCode.textContent = seg.args;
+            tcDetails.appendChild(argsCode);
+          }
+
+          if (seg.result) {
+            const resultLabel = document.createElement("div");
+            resultLabel.className = "tool-call-result-label";
+            resultLabel.textContent = "\u2192 result";
+            tcDetails.appendChild(resultLabel);
+
+            const resultCode = document.createElement("pre");
+            resultCode.className = "tool-call-result";
+            resultCode.textContent = seg.result;
+            tcDetails.appendChild(resultCode);
+          }
+
+          wrapper.appendChild(tcDetails);
           break;
         }
       }
