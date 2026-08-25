@@ -2,6 +2,8 @@ V8
 
 full refactor
 
+* 修复错误 token 无限重连的问题
+
 ---
 
 V7

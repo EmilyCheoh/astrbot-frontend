@@ -5,10 +5,6 @@
    ================================================================ */
 
 export const state = {
-  ws: null,
-  savedToken: null,
-  reconnectDelay: 1000,
-  reconnecting: false,
   pendingImages: [],
   isProcessing: false,
   batchRendering: false,

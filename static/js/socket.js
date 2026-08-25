@@ -54,3 +54,7 @@ export function send(payload) {
 export function isConnected() {
   return ws !== null && ws.readyState === WebSocket.OPEN;
 }
+
+export function stopReconnect() {
+  savedToken = null;
+}

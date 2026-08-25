@@ -7,7 +7,7 @@
 
 import { state } from "./state.js";
 import { dom } from "./dom.js";
-import { connectWS, send } from "./socket.js";
+import { connectWS, send, stopReconnect } from "./socket.js";
 import { cycleTheme, cycleFont } from "./preferences.js";
 import {
   appendBot, renderHistory, scrollToBottom,
@@ -34,7 +34,7 @@ function handleMessage(data) {
 
     case "error":
       alert(data.message || "Authentication failed");
-      state.savedToken = null;
+      stopReconnect();
       break;
 
     case "message_ack":

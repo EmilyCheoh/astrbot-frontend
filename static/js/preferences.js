@@ -2,6 +2,8 @@
    Den — Preferences (Theme + Font toggle)
    ================================================================ */
 
+import { dom } from "./dom.js";
+
 // ---- Theme — Light / Dark / Auto (3-state cycle) ----
 
 const THEME_MODES = ["light", "dark", "auto"];
@@ -18,10 +20,9 @@ export function applyTheme(mode) {
   const resolved = getResolvedTheme(mode);
   document.documentElement.setAttribute("data-theme", resolved);
   localStorage.setItem("den-theme", mode);
-  const btn = document.getElementById("theme-toggle");
-  if (btn) {
-    btn.textContent = THEME_ICONS[mode];
-    btn.title = "Theme: " + mode;
+  if (dom.themeToggle) {
+    dom.themeToggle.textContent = THEME_ICONS[mode];
+    dom.themeToggle.title = "Theme: " + mode;
   }
 }
 
@@ -51,10 +52,9 @@ export function applyFont(family) {
     isSerif ? FONT_SERIF : FONT_SANS
   );
   localStorage.setItem("den-font", family);
-  const btn = document.getElementById("font-toggle");
-  if (btn) {
-    btn.className = "icon-btn " + (isSerif ? "serif" : "sans");
-    btn.title = "Font: " + family;
+  if (dom.fontToggle) {
+    dom.fontToggle.className = "icon-btn " + (isSerif ? "serif" : "sans");
+    dom.fontToggle.title = "Font: " + family;
   }
 }
 
