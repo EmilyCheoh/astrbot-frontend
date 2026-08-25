@@ -66,9 +66,18 @@ class FrontendAdapter(Platform):
         pid = self.config.get("id", "abyss_web")
         return f"{pid}:FriendMessage:felis_abyssalis"
 
+    @staticmethod
+    @web.middleware
+    async def _cache_control(request, handler):
+        """Disable caching for all static assets (removes need for ?v= versioning)."""
+        response = await handler(request)
+        if request.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
     async def run(self):
         """Start the WebSocket (+ static file) server."""
-        app = web.Application()
+        app = web.Application(middlewares=[self._cache_control])
         app.router.add_get("/ws", self._ws_handler)
 
         # Serve the frontend when the static/ folder exists

@@ -1,0 +1,101 @@
+/* ================================================================
+   Den — Base (Reset, Typography, Scrollbars, Utilities)
+   ================================================================ */
+
+/* ---- Reset ---- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.hidden { display: none !important; }
+
+
+/* ================================================================
+   Login
+   ================================================================ */
+
+#login {
+  height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+}
+
+.login-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 32px;
+  background: var(--bg-card);
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  min-width: 280px;
+}
+
+.login-box h2 {
+  text-align: center;
+  font-weight: 500;
+  color: var(--text-supporting);
+  font-size: 18px;
+  letter-spacing: 0.5px;
+}
+
+.login-box input {
+  padding: 10px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  font-size: 14px;
+  outline: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: border-color 0.15s;
+}
+
+.login-box input::placeholder { color: var(--text-placeholder); }
+.login-box input:focus { border-color: var(--border-strong); }
+
+.login-box button {
+  padding: 10px;
+  border: none;
+  border-radius: 12px;
+  background: var(--text-supporting);
+  color: var(--bg-card);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.login-box button:hover { background: var(--text-secondary); }
+
+
+/* ================================================================
+   Scrollbar
+   ================================================================ */
+
+.chat-scroll::-webkit-scrollbar { width: 6px; }
+.chat-scroll::-webkit-scrollbar-track { background: transparent; }
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+.cot-content::-webkit-scrollbar { width: 4px; }
+.cot-content::-webkit-scrollbar-track { background: transparent; }
+.cot-content::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 2px;
+}

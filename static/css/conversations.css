@@ -1,0 +1,458 @@
+/* ================================================================
+   Den — Conversations (Sidebar panel, Items, Context menu, Pagination)
+   ================================================================ */
+
+/* ---- Conversation panel — slide from left ---- */
+.panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 90;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.panel-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.conv-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(280px, 80vw);
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border-subtle);
+  z-index: 100;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 0;
+}
+
+.conv-panel.open {
+  transform: translateX(0);
+}
+
+.new-conv-btn {
+  margin: 0 12px 12px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border-default);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-supporting);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-align: left;
+}
+
+.new-conv-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.conv-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px;
+}
+
+.conv-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+  border: none;
+  background: transparent;
+  text-align: left;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.conv-item:hover {
+  background: var(--bg-hover);
+}
+
+.conv-item.active {
+  background: var(--bg-secondary);
+}
+
+.conv-item-preview {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.conv-item.active .conv-item-preview {
+  font-weight: 600;
+}
+
+.conv-item-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.conv-list::-webkit-scrollbar { width: 4px; }
+.conv-list::-webkit-scrollbar-track { background: transparent; }
+.conv-list::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 2px;
+}
+
+
+/* ---- Search button in panel ---- */
+.search-btn {
+  margin: 0 12px 8px;
+  padding: 9px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 24px);
+}
+
+.search-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+.search-btn svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+
+/* ---- Conversation item — top row (preview + tag + pin) ---- */
+.conv-item-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+
+/* ---- Platform tag ---- */
+.platform-tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.platform-tag.qq {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+
+/* ---- Conversation context menu (three-dot) ---- */
+.conv-menu-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-placeholder);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+
+.conv-item:hover .conv-menu-btn {
+  opacity: 1;
+}
+
+.conv-menu-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+@media (hover: none) {
+  .conv-menu-btn {
+    opacity: 1;
+  }
+}
+
+.conv-menu {
+  position: fixed;
+  min-width: 160px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  z-index: 150;
+}
+
+[data-theme="dark"] .conv-menu {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.conv-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s;
+  text-align: left;
+}
+
+.conv-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.conv-menu-item svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.conv-menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border-subtle);
+}
+
+.conv-menu-item.danger {
+  color: #c0392b;
+}
+
+.conv-menu-item.danger svg {
+  color: #c0392b;
+}
+
+.conv-menu-item.danger:hover {
+  background: #fdf0ef;
+}
+
+[data-theme="dark"] .conv-menu-item.danger:hover {
+  background: #3a2020;
+}
+
+/* Rename inline input */
+.conv-rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+/* Delete confirmation dialog */
+.delete-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+[data-theme="dark"] .delete-dialog-overlay {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.delete-dialog {
+  width: min(90vw, 400px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="dark"] .delete-dialog {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.delete-dialog h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.delete-dialog p {
+  font-size: 14px;
+  color: var(--text-supporting);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.delete-dialog-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.delete-dialog-cancel,
+.delete-dialog-confirm {
+  padding: 8px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.delete-dialog-cancel {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.delete-dialog-cancel:hover {
+  background: var(--border-subtle);
+}
+
+.delete-dialog-confirm {
+  background: #c0392b;
+  color: #fff;
+}
+
+.delete-dialog-confirm:hover {
+  opacity: 0.9;
+}
+
+
+/* ---- Pinned group ---- */
+.pinned-header {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.3px;
+}
+
+.pinned-header:hover {
+  color: var(--text-supporting);
+}
+
+.pinned-arrow {
+  font-size: 8px;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+
+.pinned-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.pinned-items {
+  display: none;
+}
+
+.pinned-items.expanded {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+
+/* ---- Pagination ---- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px 4px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: auto;
+}
+
+.pagination:empty {
+  display: none;
+}
+
+.page-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 0.12s, color 0.12s;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.page-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.page-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.conv-empty {
+  padding: 20px 12px;
+  text-align: center;
+  color: var(--text-placeholder);
+  font-size: 13px;
+}

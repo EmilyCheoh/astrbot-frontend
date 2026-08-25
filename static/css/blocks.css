@@ -1,0 +1,141 @@
+/* ================================================================
+   Den — Blocks (CoT, Tool calls, Thinking indicator)
+   ================================================================ */
+
+/* ---- CoT (Chain of Thought) — collapsible block ---- */
+.cot-block {
+  margin: 4px 0 16px;
+  border: 1px solid var(--cot-border);
+  border-radius: 8px;
+  background: var(--cot-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.cot-block summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  user-select: none;
+  list-style: none;
+}
+
+.cot-block summary::-webkit-details-marker { display: none; }
+
+.cot-block summary::before {
+  content: "\25B6\FE0E";
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.cot-block[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.cot-block summary:hover { color: var(--text-supporting); }
+
+.cot-block .cot-content {
+  padding: 0 12px 10px;
+  color: var(--text-supporting);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+
+/* ---- Thinking indicator — pulsing dots ---- */
+.thinking-indicator {
+  width: min(100% - 32px, 760px);
+  margin: 0 auto;
+  padding: 8px 0;
+  display: flex;
+  gap: 5px;
+}
+
+.thinking-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-placeholder);
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+
+.thinking-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dot-pulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+
+/* ---- Tool call — collapsible block with args + result ---- */
+.tool-call-block {
+  margin: 4px 0 16px;
+  border: 1px solid var(--cot-border);
+  border-radius: 8px;
+  background: var(--cot-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.tool-call-block summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  user-select: none;
+  list-style: none;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", "Menlo", monospace;
+}
+
+.tool-call-block summary::-webkit-details-marker { display: none; }
+
+.tool-call-block summary::before {
+  content: "\25B6\FE0E";
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.tool-call-block[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.tool-call-block summary:hover { color: var(--text-supporting); }
+
+.tool-call-block pre {
+  margin: 0;
+  padding: 8px 12px;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", "Menlo", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-supporting);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.tool-call-result-label {
+  margin: 0 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--cot-border);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tool-call-result {
+  padding-top: 4px;
+}
+
+.tool-call-block pre::-webkit-scrollbar { width: 4px; }
+.tool-call-block pre::-webkit-scrollbar-track { background: transparent; }
+.tool-call-block pre::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 2px;
+}

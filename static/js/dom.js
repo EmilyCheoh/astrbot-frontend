@@ -1,0 +1,39 @@
+/* ================================================================
+   Den — DOM References
+   Centralised getElementById calls, imported by other modules.
+   ================================================================ */
+
+export const dom = {
+  login:              document.getElementById("login"),
+  chat:               document.getElementById("chat"),
+  tokenInput:         document.getElementById("token-input"),
+  loginBtn:           document.getElementById("login-btn"),
+  messages:           document.getElementById("messages"),
+  chatScroll:         document.getElementById("chat-scroll"),
+  thinkingIndicator:  document.getElementById("thinking-indicator"),
+  msgInput:           document.getElementById("msg-input"),
+  sendBtn:            document.getElementById("send-btn"),
+  themeToggle:        document.getElementById("theme-toggle"),
+  fontToggle:         document.getElementById("font-toggle"),
+  panelToggle:        document.getElementById("panel-toggle"),
+  panelOverlay:       document.getElementById("panel-overlay"),
+  convPanel:          document.getElementById("conv-panel"),
+  convList:           document.getElementById("conv-list"),
+  newConvBtn:         document.getElementById("new-conv-btn"),
+  attachBtn:          document.getElementById("attach-btn"),
+  fileInput:          document.getElementById("file-input"),
+  imgPreview:         document.getElementById("img-preview"),
+  searchBtn:          document.getElementById("search-btn"),
+  searchOverlay:      document.getElementById("search-overlay"),
+  searchInput:        document.getElementById("search-input"),
+  searchInputRow:     document.getElementById("search-input-row"),
+  searchResults:      document.getElementById("search-results"),
+  searchDateInputs:   document.getElementById("search-date-inputs"),
+  searchDateFrom:     document.getElementById("search-date-from"),
+  searchDateTo:       document.getElementById("search-date-to"),
+  searchDateApply:    document.getElementById("search-date-apply"),
+  pagination:         document.getElementById("pagination"),
+  moreMenuBtn:        document.getElementById("more-menu-btn"),
+  moreMenu:           document.getElementById("more-menu"),
+  exportMdBtn:        document.getElementById("export-md-btn"),
+};
