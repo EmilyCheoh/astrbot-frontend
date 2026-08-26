@@ -4,6 +4,10 @@ full refactor
 
 * 修复错误 token 无限重连的问题
 
+* 修复rename的bug
+
+* add rate limiter
+
 ---
 
 V7

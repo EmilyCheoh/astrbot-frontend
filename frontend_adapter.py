@@ -6,12 +6,15 @@ through a dedicated web UI, independent of QQ / NapCat.
 
 import asyncio
 import base64
+import hmac
 import json
 import math
 import mimetypes
 import os
 import sqlite3
+import time
 import uuid
+from collections import deque
 from pathlib import Path
 
 import aiohttp
@@ -54,6 +57,13 @@ class FrontendAdapter(Platform):
         self._active_ws: web.WebSocketResponse | None = None
         self._static_dir = Path(__file__).parent / "static"
         # conversation_manager is accessed via runtime module (set by Main)
+
+        # -- Auth rate limiter (global, not per-IP) ---------------------
+        self._auth_failures: deque[float] = deque()   # monotonic timestamps
+        self._auth_locked_until: float = 0.0           # monotonic deadline
+        self._AUTH_FAIL_LIMIT = 5
+        self._AUTH_WINDOW = 600       # seconds (10 min)
+        self._AUTH_LOCK_DURATION = 600  # seconds (10 min)
 
     # -- Required overrides --------------------------------------------------
 
@@ -122,6 +132,35 @@ class FrontendAdapter(Platform):
             },
         )
 
+    # -- Auth helpers --------------------------------------------------------
+
+    def _is_auth_locked(self) -> bool:
+        """Check whether auth is currently locked due to too many failures."""
+        return time.monotonic() < self._auth_locked_until
+
+    def _record_auth_failure(self) -> None:
+        """Record an auth failure. Triggers lockout if limit is reached."""
+        now = time.monotonic()
+        # Purge entries outside the sliding window
+        while self._auth_failures and self._auth_failures[0] < now - self._AUTH_WINDOW:
+            self._auth_failures.popleft()
+        self._auth_failures.append(now)
+        if len(self._auth_failures) >= self._AUTH_FAIL_LIMIT:
+            self._auth_locked_until = now + self._AUTH_LOCK_DURATION
+            logger.warning(
+                f"Auth rate limit triggered: locked for {self._AUTH_LOCK_DURATION}s"
+            )
+
+    async def _send_rate_limited(self, ws: web.WebSocketResponse) -> None:
+        """Send a rate_limited error and close the connection."""
+        remaining = max(0, int(self._auth_locked_until - time.monotonic()))
+        await ws.send_json({
+            "type": "error",
+            "code": "rate_limited",
+            "message": "Too many failed attempts. Try again later.",
+            "retry_after": remaining,
+        })
+
     # -- WebSocket handler ---------------------------------------------------
 
     async def _ws_handler(self, request: web.Request) -> web.WebSocketResponse:
@@ -131,8 +170,67 @@ class FrontendAdapter(Platform):
         )
         await ws.prepare(request)
 
-        authenticated = False
+        # -- First lock check (connection time) -------------------------
+        if self._is_auth_locked():
+            await self._send_rate_limited(ws)
+            await ws.close()
+            return ws
 
+        # -- Wait for first message (10s auth timeout) ------------------
+        try:
+            first_msg = await asyncio.wait_for(ws.receive(), timeout=10)
+        except asyncio.TimeoutError:
+            logger.info("Auth timeout: no message received within 10s")
+            await ws.close()
+            return ws
+
+        if first_msg.type != aiohttp.WSMsgType.TEXT:
+            await ws.close()
+            return ws
+
+        try:
+            data = json.loads(first_msg.data)
+        except json.JSONDecodeError:
+            await ws.close()
+            return ws
+
+        if data.get("type") != "auth":
+            await ws.close()
+            return ws
+
+        # -- Second lock check (auth message time) ----------------------
+        # Prevents pre-established connections from bypassing lockout
+        if self._is_auth_locked():
+            await self._send_rate_limited(ws)
+            await ws.close()
+            return ws
+
+        # -- Token comparison (constant-time) ---------------------------
+        if not hmac.compare_digest(
+            str(data.get("token", "")),
+            str(self.config.get("token", "")),
+        ):
+            # Record failure synchronously — no await between check and record
+            self._record_auth_failure()
+            if self._is_auth_locked():
+                await self._send_rate_limited(ws)
+            else:
+                await ws.send_json(
+                    {"type": "error", "message": "Invalid token"}
+                )
+            await ws.close()
+            return ws
+
+        # -- Auth success -----------------------------------------------
+        self._auth_failures.clear()
+        self._active_ws = ws
+        await ws.send_json({"type": "auth_ok"})
+        await self._send_history(ws)
+        logger.info("Web frontend client authenticated.")
+
+        # -- Authenticated message loop ---------------------------------
+        # All handlers below are inherently authenticated — the loop
+        # only runs after successful auth above.
         try:
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
@@ -143,83 +241,68 @@ class FrontendAdapter(Platform):
 
                     kind = data.get("type")
 
-                    # --- Authentication handshake ---------------------------
-                    if kind == "auth":
-                        if data.get("token") == self.config.get("token"):
-                            authenticated = True
-                            self._active_ws = ws
-                            await ws.send_json({"type": "auth_ok"})
-                            await self._send_history(ws)
-                            logger.info("Web frontend client authenticated.")
-                        else:
-                            await ws.send_json(
-                                {"type": "error", "message": "Invalid token"}
-                            )
-                            await ws.close()
-                            break
-
-                    # --- Incoming chat message ------------------------------
-                    elif kind == "message" and authenticated:
+                    # --- Incoming chat message --------------------------
+                    if kind == "message":
                         await self._on_message(data, ws)
 
-                    # --- Conversation management ---------------------------
-                    elif kind == "list_conversations" and authenticated:
+                    # --- Conversation management -----------------------
+                    elif kind == "list_conversations":
                         page = data.get("page", 1)
                         limit = data.get("limit", 20)
                         await self._send_conversations_list(ws, page=page, limit=limit)
 
-                    elif kind == "switch_conversation" and authenticated:
+                    elif kind == "switch_conversation":
                         cid = data.get("conversation_id")
                         if cid:
                             await self._handle_switch(ws, cid)
 
-                    elif kind == "new_conversation" and authenticated:
+                    elif kind == "new_conversation":
                         await self._handle_new(ws)
 
-                    elif kind == "search_conversations" and authenticated:
+                    elif kind == "search_conversations":
                         await self._handle_search(ws, data)
 
-                    elif kind == "view_history" and authenticated:
+                    elif kind == "view_history":
                         cid = data.get("conversation_id")
                         if cid:
                             await self._handle_view_history(ws, cid)
 
-                    elif kind == "pin_conversation" and authenticated:
+                    elif kind == "pin_conversation":
                         cid = data.get("conversation_id")
                         if cid:
                             await self._handle_pin(ws, cid)
 
-                    elif kind == "unpin_conversation" and authenticated:
+                    elif kind == "unpin_conversation":
                         cid = data.get("conversation_id")
                         if cid:
                             await self._handle_unpin(ws, cid)
 
-                    # --- Rename / Delete -----------------------------------
-                    elif kind == "rename_conversation" and authenticated:
+                    # --- Rename / Delete -------------------------------
+                    elif kind == "rename_conversation":
                         cid = data.get("conversation_id")
                         title = data.get("title", "")
                         pid = data.get("platform_id", "")
                         if cid and title is not None:
                             await self._handle_rename(ws, cid, title.strip(), pid)
 
-                    elif kind == "delete_conversation" and authenticated:
+                    elif kind == "delete_conversation":
                         cid = data.get("conversation_id")
                         pid = data.get("platform_id", "")
                         if cid:
                             await self._handle_delete(ws, cid, pid)
 
-                    # --- Edit / Retry --------------------------------------
-                    elif kind == "retry" and authenticated:
+                    # --- Edit / Retry ----------------------------------
+                    elif kind == "retry":
                         await self._handle_retry_or_edit(
                             ws, data.get("content", ""), action="retry",
                         )
 
-                    elif kind == "edit_message" and authenticated:
+                    elif kind == "edit_message":
                         await self._handle_retry_or_edit(
                             ws, data.get("content", ""), action="edit",
                         )
 
-                    # --- Heartbeat -----------------------------------------
+                    # --- Heartbeat -------------------------------------
                     elif kind == "ping":
                         await ws.send_json({"type": "pong"})
 
