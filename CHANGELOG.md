@@ -29,6 +29,15 @@ refactor frontend_adapter.py
 - Clean up dead import (math)
 - Pure code move, no behavior changes
 
+4. refactor: extract message_service.py from frontend_adapter
+
+- New MessageService class: on_message, handle_retry_or_edit,
+  truncate_last_exchange, AstrBotMessage construction, FrontendEvent creation
+- MessageService receives adapter ref + ConversationService via constructor
+- runtime.conversation_manager read dynamically (never cached)
+- Adapter reduced from ~1056 to ~297 lines — pure dispatcher
+- Clean up all dead imports
+- Pure code move, no behavior changes
 ---
 
 V8
