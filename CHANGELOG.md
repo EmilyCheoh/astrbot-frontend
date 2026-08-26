@@ -11,6 +11,14 @@ refactor frontend_adapter.py
   clean up unused imports (base64, mimetypes, os, Node, Record)
 - Pure code move, no behavior changes
 
+2. refactor: extract auth_guard.py from frontend_adapter
+
+- New AuthGuard class: is_locked, record_failure, clear_failures,
+  retry_after, compare_token (transport-agnostic)
+- Adapter keeps _send_rate_limited (WebSocket error sending)
+- Clean up dead imports (hmac, time, deque)
+- Pure code move, no behavior changes
+
 ---
 
 V8

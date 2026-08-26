@@ -5,13 +5,10 @@ through a dedicated web UI, independent of QQ / NapCat.
 """
 
 import asyncio
-import hmac
 import json
 import math
 import sqlite3
-import time
 import uuid
-from collections import deque
 from pathlib import Path
 
 import aiohttp
@@ -29,6 +26,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Plain, Image
 from astrbot import logger
 
+from .auth_guard import AuthGuard
 from .frontend_event import FrontendEvent
 from .media_utils import chain_to_segments, save_temp_media
 from . import runtime
@@ -56,12 +54,8 @@ class FrontendAdapter(Platform):
         self._static_dir = Path(__file__).parent / "static"
         # conversation_manager is accessed via runtime module (set by Main)
 
-        # -- Auth rate limiter (global, not per-IP) ---------------------
-        self._auth_failures: deque[float] = deque()   # monotonic timestamps
-        self._auth_locked_until: float = 0.0           # monotonic deadline
-        self._AUTH_FAIL_LIMIT = 5
-        self._AUTH_WINDOW = 600       # seconds (10 min)
-        self._AUTH_LOCK_DURATION = 600  # seconds (10 min)
+        # Auth rate limiter (transport-agnostic state)
+        self.auth_guard = AuthGuard(fail_limit=5, window=600, lock_duration=600)
 
     # -- Required overrides --------------------------------------------------
 
@@ -132,31 +126,13 @@ class FrontendAdapter(Platform):
 
     # -- Auth helpers --------------------------------------------------------
 
-    def _is_auth_locked(self) -> bool:
-        """Check whether auth is currently locked due to too many failures."""
-        return time.monotonic() < self._auth_locked_until
-
-    def _record_auth_failure(self) -> None:
-        """Record an auth failure. Triggers lockout if limit is reached."""
-        now = time.monotonic()
-        # Purge entries outside the sliding window
-        while self._auth_failures and self._auth_failures[0] < now - self._AUTH_WINDOW:
-            self._auth_failures.popleft()
-        self._auth_failures.append(now)
-        if len(self._auth_failures) >= self._AUTH_FAIL_LIMIT:
-            self._auth_locked_until = now + self._AUTH_LOCK_DURATION
-            logger.warning(
-                f"Auth rate limit triggered: locked for {self._AUTH_LOCK_DURATION}s"
-            )
-
     async def _send_rate_limited(self, ws: web.WebSocketResponse) -> None:
-        """Send a rate_limited error and close the connection."""
-        remaining = max(0, int(self._auth_locked_until - time.monotonic()))
+        """Send a rate_limited error via WebSocket (transport layer)."""
         await ws.send_json({
             "type": "error",
             "code": "rate_limited",
             "message": "Too many failed attempts. Try again later.",
-            "retry_after": remaining,
+            "retry_after": self.auth_guard.retry_after(),
         })
 
     # -- WebSocket handler ---------------------------------------------------
@@ -169,7 +145,7 @@ class FrontendAdapter(Platform):
         await ws.prepare(request)
 
         # -- First lock check (connection time) -------------------------
-        if self._is_auth_locked():
+        if self.auth_guard.is_locked():
             await self._send_rate_limited(ws)
             await ws.close()
             return ws
@@ -198,19 +174,19 @@ class FrontendAdapter(Platform):
 
         # -- Second lock check (auth message time) ----------------------
         # Prevents pre-established connections from bypassing lockout
-        if self._is_auth_locked():
+        if self.auth_guard.is_locked():
             await self._send_rate_limited(ws)
             await ws.close()
             return ws
 
         # -- Token comparison (constant-time) ---------------------------
-        if not hmac.compare_digest(
-            str(data.get("token", "")),
-            str(self.config.get("token", "")),
+        if not self.auth_guard.compare_token(
+            data.get("token", ""),
+            self.config.get("token", ""),
         ):
             # Record failure synchronously — no await between check and record
-            self._record_auth_failure()
-            if self._is_auth_locked():
+            self.auth_guard.record_failure()
+            if self.auth_guard.is_locked():
                 await self._send_rate_limited(ws)
             else:
                 await ws.send_json(
@@ -220,7 +196,7 @@ class FrontendAdapter(Platform):
             return ws
 
         # -- Auth success -----------------------------------------------
-        self._auth_failures.clear()
+        self.auth_guard.clear_failures()
         self._active_ws = ws
         await ws.send_json({"type": "auth_ok"})
         await self._send_history(ws)
