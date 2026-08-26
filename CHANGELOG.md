@@ -1,3 +1,18 @@
+V9
+
+refactor frontend_adapter.py
+
+1. refactor: extract media_utils.py from frontend_adapter
+
+- New media_utils.py: chain_to_segments, parse_tool_call_text,
+  media_to_data_uri, save_temp_media
+- frontend_event.py: import chain_to_segments from media_utils
+- frontend_adapter.py: import from media_utils, remove old methods,
+  clean up unused imports (base64, mimetypes, os, Node, Record)
+- Pure code move, no behavior changes
+
+---
+
 V8
 
 full refactor

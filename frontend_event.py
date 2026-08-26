@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 
+from .media_utils import chain_to_segments
+
 if TYPE_CHECKING:
     from .frontend_adapter import FrontendAdapter
 
@@ -33,7 +35,7 @@ class FrontendEvent(AstrMessageEvent):
         ws = self._adapter._active_ws
 
         if ws is not None and not ws.closed:
-            segments = await self._adapter._chain_to_segments(message)
+            segments = await chain_to_segments(message)
             await ws.send_json({"type": "message", "segments": segments})
 
             # Clear the "thinking" indicator
