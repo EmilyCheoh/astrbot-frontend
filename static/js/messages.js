@@ -49,6 +49,10 @@ function formatToolArgs(argsStr) {
   }
 }
 
+// Accumulates intermediate segments (thinking, tool calls) into
+// a single bot row until the final text segment arrives.
+let pendingBotRow = null;
+
 function createActionBar(actions) {
   const bar = document.createElement("div");
   bar.className = "msg-actions";
@@ -94,6 +98,8 @@ export function updateLastActions() {
 // ---- Append user message ----
 
 export function appendUser(text) {
+  pendingBotRow = null;  // New user turn — reset accumulator
+
   const wrapper = document.createElement("div");
   wrapper.className = "msg-row msg-row-user";
   wrapper.dataset.text = text;
@@ -116,94 +122,120 @@ export function appendUser(text) {
 
 // ---- Append bot message ----
 
-export function appendBot(segments) {
-  const row = document.createElement("div");
-  row.className = "msg-row msg-row-bot";
+function appendSegment(wrapper, seg) {
+  switch (seg.type) {
+    case "text": {
+      const content = document.createElement("div");
+      content.innerHTML = renderMarkdown(seg.data);
+      wrapper.appendChild(content);
+      break;
+    }
 
-  const wrapper = document.createElement("div");
-  wrapper.className = "msg-bot";
+    case "image": {
+      const img = document.createElement("img");
+      img.src = seg.data;
+      wrapper.appendChild(img);
+      break;
+    }
+
+    case "audio": {
+      const audio = document.createElement("audio");
+      audio.controls = true;
+      audio.src = seg.data;
+      wrapper.appendChild(audio);
+      break;
+    }
+
+    case "reasoning": {
+      const details = document.createElement("details");
+      details.className = "cot-block";
+      const summary = document.createElement("summary");
+      summary.textContent = "Thinking\u2026";
+      const body = document.createElement("div");
+      body.className = "cot-content";
+      body.textContent = seg.data;
+      details.appendChild(summary);
+      details.appendChild(body);
+      wrapper.appendChild(details);
+      break;
+    }
+
+    case "tool_call": {
+      const tcDetails = document.createElement("details");
+      tcDetails.className = "tool-call-block";
+      const tcSummary = document.createElement("summary");
+      tcSummary.textContent = seg.name || "tool call";
+      tcDetails.appendChild(tcSummary);
+
+      if (seg.args) {
+        const argsCode = document.createElement("pre");
+        argsCode.className = "tool-call-args";
+        argsCode.textContent = seg.args;
+        tcDetails.appendChild(argsCode);
+      }
+
+      if (seg.result) {
+        const resultLabel = document.createElement("div");
+        resultLabel.className = "tool-call-result-label";
+        resultLabel.textContent = "\u2192 result";
+        tcDetails.appendChild(resultLabel);
+
+        const resultCode = document.createElement("pre");
+        resultCode.className = "tool-call-result";
+        resultCode.textContent = seg.result;
+        tcDetails.appendChild(resultCode);
+      }
+
+      wrapper.appendChild(tcDetails);
+      break;
+    }
+  }
+}
+
+export function appendBot(segments) {
+  const isIntermediate = segments.length > 0
+    && segments.every(s => s.type === "reasoning" || s.type === "tool_call");
+
+  // Reuse pending row or create a new one
+  let row = pendingBotRow;
+  let wrapper;
+
+  if (!row || !row.isConnected) {
+    row = document.createElement("div");
+    row.className = "msg-row msg-row-bot";
+
+    wrapper = document.createElement("div");
+    wrapper.className = "msg-bot";
+
+    row.appendChild(wrapper);
+    dom.messages.appendChild(row);
+  } else {
+    wrapper = row.querySelector(".msg-bot");
+  }
 
   let plainText = "";
 
   for (const seg of segments) {
-    switch (seg.type) {
-      case "text": {
-        const content = document.createElement("div");
-        content.innerHTML = renderMarkdown(seg.data);
-        wrapper.appendChild(content);
-        plainText += seg.data;
-        break;
-      }
-
-      case "image": {
-        const img = document.createElement("img");
-        img.src = seg.data;
-        wrapper.appendChild(img);
-        break;
-      }
-
-      case "audio": {
-        const audio = document.createElement("audio");
-        audio.controls = true;
-        audio.src = seg.data;
-        wrapper.appendChild(audio);
-        break;
-      }
-
-      case "reasoning": {
-        const details = document.createElement("details");
-        details.className = "cot-block";
-        const summary = document.createElement("summary");
-        summary.textContent = "Thinking\u2026";
-        const body = document.createElement("div");
-        body.className = "cot-content";
-        body.textContent = seg.data;
-        details.appendChild(summary);
-        details.appendChild(body);
-        wrapper.appendChild(details);
-        break;
-      }
-
-      case "tool_call": {
-        const tcDetails = document.createElement("details");
-        tcDetails.className = "tool-call-block";
-        const tcSummary = document.createElement("summary");
-        tcSummary.textContent = seg.name || "tool call";
-        tcDetails.appendChild(tcSummary);
-
-        if (seg.args) {
-          const argsCode = document.createElement("pre");
-          argsCode.className = "tool-call-args";
-          argsCode.textContent = seg.args;
-          tcDetails.appendChild(argsCode);
-        }
-
-        if (seg.result) {
-          const resultLabel = document.createElement("div");
-          resultLabel.className = "tool-call-result-label";
-          resultLabel.textContent = "\u2192 result";
-          tcDetails.appendChild(resultLabel);
-
-          const resultCode = document.createElement("pre");
-          resultCode.className = "tool-call-result";
-          resultCode.textContent = seg.result;
-          tcDetails.appendChild(resultCode);
-        }
-
-        wrapper.appendChild(tcDetails);
-        break;
-      }
+    appendSegment(wrapper, seg);
+    if (seg.type === "text") {
+      plainText += seg.data || "";
     }
   }
 
-  const actions = createActionBar([
-    { icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" },
-    { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(plainText, e.currentTarget) },
-  ]);
+  if (isIntermediate) {
+    // Thinking / tool call — hold the row, no action bar yet
+    pendingBotRow = row;
+  } else {
+    // Final text arrived — complete the response row
+    const actions = createActionBar([
+      { icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" },
+      { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(plainText, e.currentTarget) },
+    ]);
 
-  row.appendChild(wrapper);
-  row.appendChild(actions);
-  dom.messages.appendChild(row);
+    row.appendChild(actions);
+    pendingBotRow = null;
+  }
+
   if (!state.batchRendering) updateLastActions();
   scrollToBottom();
 }
@@ -325,7 +357,14 @@ function handleRetry(botRow) {
   const userText = lastUser.dataset.text;
   if (!userText) return;
 
-  botRow.remove();
+  // Remove all response rows after the last user message
+  let node = lastUser.nextElementSibling;
+  while (node) {
+    const next = node.nextElementSibling;
+    node.remove();
+    node = next;
+  }
+  pendingBotRow = null;
   updateLastActions();
 
   send({ type: "retry", content: userText });
@@ -378,8 +417,14 @@ function handleEditClick(userRow) {
     userRow.dataset.text = newText;
     if (actionsBar) actionsBar.classList.remove("hidden");
 
-    const lastBot = dom.messages.querySelector(".msg-row-bot.is-last");
-    if (lastBot) lastBot.remove();
+    // Remove all response rows after this user message
+    let node = userRow.nextElementSibling;
+    while (node) {
+      const next = node.nextElementSibling;
+      node.remove();
+      node = next;
+    }
+    pendingBotRow = null;
 
     send({ type: "edit_message", content: newText });
     updateLastActions();
