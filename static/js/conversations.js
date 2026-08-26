@@ -95,8 +95,10 @@ export function renderConvList(data) {
 // ---- Conversation item ----
 
 function createConvItem(conv) {
-  const btn = document.createElement("button");
+  const btn = document.createElement("div");
   btn.className = "conv-item" + (conv.active ? " active" : "");
+  btn.setAttribute("role", "button");
+  btn.tabIndex = 0;
   btn.dataset.id = conv.id;
   btn.dataset.platform = conv.platform_id;
 
@@ -132,7 +134,7 @@ function createConvItem(conv) {
   btn.appendChild(time);
 
   btn.addEventListener("click", (e) => {
-    if (e.target.closest(".conv-menu-btn")) return;
+    if (e.target.closest(".conv-menu-btn, .conv-rename-input")) return;
     state.currentConvTitle = conv.preview || "conversation";
 
     if (!isConnected()) return;
@@ -276,11 +278,47 @@ function startRename(conv, convItemEl) {
     }
   }
 
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); finishRename(true); }
-    if (e.key === "Escape") { finishRename(false); }
+  // -- IME composition guard --
+  let isComposing = false;
+  let saveAfterComposition = false;
+
+  input.addEventListener("compositionstart", () => {
+    isComposing = true;
   });
-  input.addEventListener("blur", () => finishRename(false));
+
+  input.addEventListener("compositionend", () => {
+    isComposing = false;
+    if (saveAfterComposition) {
+      saveAfterComposition = false;
+      finishRename(true);
+    }
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.isComposing || isComposing || e.keyCode === 229) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      finishRename(true);
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      finishRename(false);
+    }
+  });
+
+  input.addEventListener("blur", () => {
+    if (isComposing) {
+      saveAfterComposition = true;
+      return;
+    }
+    finishRename(true);
+  });
+
+  input.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
 }
 
 // ---- Delete ----
