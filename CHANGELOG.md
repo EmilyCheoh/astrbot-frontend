@@ -19,6 +19,16 @@ refactor frontend_adapter.py
 - Clean up dead imports (hmac, time, deque)
 - Pure code move, no behavior changes
 
+3. refactor: extract conversation_service.py from frontend_adapter
+
+- New ConversationService class: history loading, conversation list,
+  switch/new, search, view_history, pin/unpin, rename/delete,
+  DB location, pin storage, unicode escape helper
+- Adapter dispatch table rewired to self.conversations.*
+- runtime.conversation_manager read dynamically (never cached)
+- Clean up dead import (math)
+- Pure code move, no behavior changes
+
 ---
 
 V8
