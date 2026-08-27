@@ -82,6 +82,17 @@ function handleDelete() {
 
 // ---- Export ----
 
+function formatToolArgs(raw) {
+  let obj;
+  if (typeof raw === "string") {
+    try { obj = JSON.parse(raw); } catch { return raw; }
+  } else {
+    obj = raw;
+  }
+  // Pretty-print with real newlines inside string values
+  return JSON.stringify(obj, null, 2).replace(/\\n/g, "\n");
+}
+
 function exportMarkdown() {
   if (!state.currentMessages.length) return;
 
@@ -90,24 +101,28 @@ function exportMarkdown() {
   for (const msg of state.currentMessages) {
     const role = msg.role || "system";
 
+    // Tool results — compact block under previous tool call
     if (role === "tool") {
       const resultText = typeof msg.content === "string"
         ? msg.content
         : JSON.stringify(msg.content, null, 2);
-      md += "<details><summary>\u2192 result</summary>\n\n```\n" + resultText + "\n```\n\n</details>\n\n---\n\n";
+      md += "> **Result**\n>\n> ```\n> " + resultText.split("\n").join("\n> ") + "\n> ```\n\n---\n\n";
       continue;
     }
 
-    const prefix = role === "user" ? "**User:**"
-      : role === "assistant" ? "**Assistant:**"
-      : "**" + role + ":**";
+    const prefix = role === "user" ? "### Felis Abyssalis"
+      : role === "assistant" ? "### Abyss AI"
+      : "### " + role;
 
     let text = "";
     if (Array.isArray(msg.content)) {
       for (const block of msg.content) {
         if (block.type === "thinking" || block.type === "think") {
-          const thinkText = block.thinking || block.think || block.text || block.content || "";
-          text += "<details><summary>thinking</summary>\n\n" + thinkText + "\n\n</details>\n\n";
+          const thinkText = (block.thinking || block.think || block.text || block.content || "").trim();
+          if (thinkText) {
+            // Blockquote with italic header
+            text += "*Thinking:*\n\n" + thinkText.split("\n").map(l => "> " + l).join("\n") + "\n\n";
+          }
         } else if (block.type === "text") {
           text += block.text || block.content || "";
         } else if (typeof block === "string") {
@@ -127,13 +142,8 @@ function exportMarkdown() {
     if (role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
       for (const tc of msg.tool_calls) {
         const fn = tc.function || {};
-        let args = fn.arguments || "";
-        if (typeof args === "string") {
-          try { args = JSON.stringify(JSON.parse(args), null, 2); } catch {}
-        } else {
-          args = JSON.stringify(args, null, 2);
-        }
-        text += "\n\n<details><summary>\u26A1 " + (fn.name || "tool call") + "</summary>\n\n```\n" + args + "\n```\n\n</details>";
+        const args = formatToolArgs(fn.arguments || "");
+        text += "\n\n> **" + (fn.name || "tool call") + "**\n>\n> ```\n> " + args.split("\n").join("\n> ") + "\n> ```";
       }
     }
 
