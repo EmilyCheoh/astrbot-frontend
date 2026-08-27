@@ -95,8 +95,9 @@ export function renderConvList(data) {
 // ---- Conversation item ----
 
 function createConvItem(conv) {
+  const isSelected = conv.id === state.currentConversationId;
   const btn = document.createElement("div");
-  btn.className = "conv-item" + (conv.active ? " active" : "");
+  btn.className = "conv-item" + (isSelected ? " active" : "");
   btn.setAttribute("role", "button");
   btn.tabIndex = 0;
   btn.dataset.id = conv.id;

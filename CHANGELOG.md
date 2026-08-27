@@ -1,5 +1,9 @@
 debugging
 
+* sidebar now highlights active conversation
+
+* fixed tool call rendering order
+
 ---
 
 V9

@@ -103,13 +103,13 @@ class ConversationService:
 
             if conversation_id:
                 cursor = conn.execute(
-                    "SELECT content FROM conversations "
+                    "SELECT content, conversation_id FROM conversations "
                     "WHERE conversation_id = ? AND platform_id = ?",
                     (conversation_id, platform_id),
                 )
             else:
                 cursor = conn.execute(
-                    "SELECT content FROM conversations "
+                    "SELECT content, conversation_id FROM conversations "
                     "WHERE platform_id = ? ORDER BY updated_at DESC LIMIT 1",
                     (platform_id,),
                 )
@@ -124,6 +124,7 @@ class ConversationService:
                     "messages": messages,
                     "readonly": False,
                     "platform_id": platform_id,
+                    "conversation_id": row[1],
                 })
             else:
                 # No history — send empty so frontend knows to clear
@@ -132,6 +133,7 @@ class ConversationService:
                     "messages": [],
                     "readonly": False,
                     "platform_id": platform_id,
+                    "conversation_id": conversation_id,
                 })
         except Exception as exc:
             logger.warning(f"Failed to load chat history: {exc}")

@@ -9,6 +9,7 @@ export const state = {
   isProcessing: false,
   batchRendering: false,
   currentMessages: [],
+  currentConversationId: null,
   isReadonly: false,
   currentConvTitle: "",
   currentPage: 1,

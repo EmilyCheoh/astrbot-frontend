@@ -64,11 +64,13 @@ function handleMessage(data) {
     }
 
     case "history":
+      state.currentConversationId = data.conversation_id || null;
       state.currentMessages = data.messages || [];
       state.isReadonly = data.readonly || false;
       dom.messages.innerHTML = "";
       renderHistory(state.currentMessages);
       setComposerReadonly(state.isReadonly);
+      if (state.lastConvListData) renderConvList(state.lastConvListData);
       break;
 
     case "conversations_list":
@@ -77,12 +79,14 @@ function handleMessage(data) {
       break;
 
     case "conversation_switched":
+      state.currentConversationId = data.conversation_id || null;
       state.isReadonly = false;
       setComposerReadonly(false);
       closePanel();
       break;
 
     case "conversation_created":
+      state.currentConversationId = data.conversation_id || null;
       state.currentMessages = [];
       state.isReadonly = false;
       dom.messages.innerHTML = "";
@@ -114,21 +118,20 @@ function handleMessage(data) {
       }
       break;
 
-    case "conversation_deleted":
+    case "conversation_deleted": {
+      const wasViewing = state.currentConversationId === data.conversation_id;
       if (state.lastConvListData) {
-        const dc = state.lastConvListData.conversations.find(
-          c => c.id === data.conversation_id && c.active
-        );
         state.lastConvListData.conversations = state.lastConvListData.conversations.filter(
           c => c.id !== data.conversation_id
         );
         state.lastConvListData.total = Math.max(0, state.lastConvListData.total - 1);
         renderConvList(state.lastConvListData);
-        if (dc) {
+        if (wasViewing) {
           send({ type: "new_conversation" });
         }
       }
       break;
+    }
   }
 }
 

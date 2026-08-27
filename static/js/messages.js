@@ -278,6 +278,10 @@ export function renderHistory(messages) {
         segments.push({ type: "reasoning", data: thinkText.trim() });
       }
 
+      if (text) {
+        segments.push({ type: "text", data: text });
+      }
+
       if (msg.tool_calls && msg.tool_calls.length > 0) {
         for (const tc of msg.tool_calls) {
           const fn = tc.function || {};
@@ -297,10 +301,6 @@ export function renderHistory(messages) {
             result: resultContent,
           });
         }
-      }
-
-      if (text) {
-        segments.push({ type: "text", data: text });
       }
       if (segments.length > 0) {
         appendBot(segments);
