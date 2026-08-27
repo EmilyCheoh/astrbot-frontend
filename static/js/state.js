@@ -28,6 +28,7 @@ export const state = {
   activeAnchorId: null,           // Search result not yet in loaded list
 
   // Cursor pagination
+  listGeneration: 0,    // Incremented on each sidebar open, stale responses rejected
   nextCursor: null,
   hasMore: true,
   isLoadingMore: false,

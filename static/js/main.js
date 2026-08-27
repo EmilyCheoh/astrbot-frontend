@@ -71,6 +71,10 @@ function handleMessage(data) {
     case "history":
       state.currentConversationId = data.conversation_id || null;
       state.pendingConversationId = null;
+      // Clear search anchor if we navigated away from it
+      if (state.activeAnchorId && state.activeAnchorId !== data.conversation_id) {
+        state.activeAnchorId = null;
+      }
       state.currentMessages = data.messages || [];
       state.isReadonly = data.readonly || false;
       dom.messages.innerHTML = "";
@@ -88,7 +92,21 @@ function handleMessage(data) {
         data.conversations || [],
         data.next_cursor || null,
         data.has_more !== false,
+        data.generation,
       );
+      break;
+
+    case "conversations_list_failed":
+      // Only clear loading if generation matches (not stale)
+      if (data.generation === undefined || data.generation === state.listGeneration) {
+        state.isLoadingMore = false;
+        renderSidebar();
+      }
+      break;
+
+    case "navigation_failed":
+      state.pendingConversationId = null;
+      renderSidebar();
       break;
 
     case "conversation_switched":

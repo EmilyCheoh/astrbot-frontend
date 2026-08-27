@@ -8,6 +8,15 @@ debugging
 
 * optimized Favorite and pagination
 
+* fix(sidebar): address race conditions, ghost anchors, scroll reset, and failure paths
+
+- Generation counter prevents stale list responses from corrupting sidebar state
+- Search anchor cleared on non-anchor navigation (click + history arrival)
+- Scroll resets to top on sidebar reopen, preserved on load-more
+- Pin lock scope expanded to cover favorites fetch + response send
+- Backend sends conversations_list_failed / navigation_failed on errors
+- Frontend clears pending states on failure responses
+
 ---
 
 V9

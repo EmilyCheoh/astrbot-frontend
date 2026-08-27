@@ -29,6 +29,7 @@ function setupSentinel() {
           type: "list_conversations",
           cursor: state.nextCursor,
           limit: 20,
+          generation: state.listGeneration,
         });
       }
     },
@@ -44,14 +45,17 @@ function setupSentinel() {
 
 export function openPanel() {
   if (!isConnected()) return;
-  // Always reset and fetch the latest first batch
+  // Increment generation — stale responses from previous opens will be rejected
+  state.listGeneration += 1;
+  // Reset cursor state and fetch fresh first batch
   state.conversationIds = [];
   state.nextCursor = null;
   state.hasMore = true;
   state.isLoadingMore = true;
-  dom.convLoading.classList.remove("hidden");
-  dom.convEnd.classList.add("hidden");
-  send({ type: "list_conversations", limit: 20 });
+  // Clear old DOM immediately, reset scroll to top
+  dom.convList.scrollTop = 0;
+  renderSidebar({ preserveScroll: false });
+  send({ type: "list_conversations", limit: 20, generation: state.listGeneration });
   dom.convPanel.classList.add("open");
   dom.panelOverlay.classList.remove("hidden");
   dom.panelOverlay.classList.add("open");
@@ -93,8 +97,13 @@ function getConv(id) {
 /**
  * Merge a batch of conversation objects into the Map store.
  * Called on conversations_list arrival.
+ * Rejects stale responses via generation counter.
  */
-export function mergeConversations(conversations, nextCursor, hasMore) {
+export function mergeConversations(conversations, nextCursor, hasMore, generation) {
+  // Reject stale responses from previous sidebar opens
+  if (generation !== undefined && generation !== state.listGeneration) return;
+
+  const isFirstBatch = state.conversationIds.length === 0;
   const incomingIds = [];
 
   for (const conv of conversations) {
@@ -102,8 +111,8 @@ export function mergeConversations(conversations, nextCursor, hasMore) {
     incomingIds.push(conv.id);
   }
 
-  if (!state.nextCursor) {
-    // First batch (no prior cursor) — replace
+  if (isFirstBatch) {
+    // First batch — replace
     state.conversationIds = incomingIds;
   } else {
     // Subsequent batch — deduplicated append
@@ -119,7 +128,7 @@ export function mergeConversations(conversations, nextCursor, hasMore) {
   state.hasMore = hasMore;
   state.isLoadingMore = false;
 
-  renderSidebar();
+  renderSidebar({ preserveScroll: !isFirstBatch });
 }
 
 /**
@@ -159,9 +168,8 @@ export function removeConversation(id) {
 
 // ---- Full sidebar render ----
 
-export function renderSidebar() {
-  // Preserve scroll position
-  const scrollTop = dom.convList.scrollTop;
+export function renderSidebar({ preserveScroll = true } = {}) {
+  const scrollTop = preserveScroll ? dom.convList.scrollTop : 0;
 
   // Clear everything except the sentinel
   const sentinel = dom.convSentinel;
@@ -311,6 +319,11 @@ function createConvItem(conv) {
     state.currentConvTitle = conv.preview || "conversation";
 
     if (!isConnected()) return;
+
+    // Clear search anchor when navigating to a different conversation
+    if (state.activeAnchorId && state.activeAnchorId !== conv.id) {
+      state.activeAnchorId = null;
+    }
 
     if (conv.platform_id === "Abyss") {
       state.pendingConversationId = conv.id;

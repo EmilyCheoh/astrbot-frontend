@@ -263,6 +263,7 @@ class ConversationService:
         ws: web.WebSocketResponse,
         cursor: str | None = None,
         limit: int = 20,
+        generation: int | None = None,
     ):
         """Send a cursor-paginated list of conversations."""
         try:
@@ -320,14 +321,24 @@ class ConversationService:
                 last = rows[-1]
                 next_cursor = f"{last[2]}|{last[0]}"
 
-            await ws.send_json({
+            response = {
                 "type": "conversations_list",
                 "conversations": conversations,
                 "next_cursor": next_cursor,
                 "has_more": has_more,
-            })
+            }
+            if generation is not None:
+                response["generation"] = generation
+            await ws.send_json(response)
         except Exception as exc:
             logger.warning(f"Failed to list conversations: {exc}")
+            try:
+                response = {"type": "conversations_list_failed"}
+                if generation is not None:
+                    response["generation"] = generation
+                await ws.send_json(response)
+            except Exception:
+                pass
 
     # -- Switch / New ----------------------------------------------------------
 
@@ -348,6 +359,13 @@ class ConversationService:
             await self.send_history(ws, conversation_id)
         except Exception as exc:
             logger.warning(f"Failed to switch conversation: {exc}")
+            try:
+                await ws.send_json({
+                    "type": "navigation_failed",
+                    "conversation_id": conversation_id,
+                })
+            except Exception:
+                pass
 
     async def handle_new(self, ws: web.WebSocketResponse):
         """Create a new conversation and switch to it."""
@@ -512,6 +530,13 @@ class ConversationService:
                 })
         except Exception as exc:
             logger.warning(f"Failed to view history: {exc}")
+            try:
+                await ws.send_json({
+                    "type": "navigation_failed",
+                    "conversation_id": conversation_id,
+                })
+            except Exception:
+                pass
 
     # -- Pin / Unpin -----------------------------------------------------------
 
@@ -522,13 +547,13 @@ class ConversationService:
                 if conversation_id not in pins:
                     pins.append(conversation_id)
                     self.save_pins(pins)
-            favorites = await self.get_favorites()
-            await ws.send_json({
-                "type": "pin_updated",
-                "conversation_id": conversation_id,
-                "pinned": True,
-                "favorites": favorites,
-            })
+                favorites = await self.get_favorites()
+                await ws.send_json({
+                    "type": "pin_updated",
+                    "conversation_id": conversation_id,
+                    "pinned": True,
+                    "favorites": favorites,
+                })
         except Exception as exc:
             logger.warning(f"Failed to pin conversation: {exc}")
             try:
@@ -546,13 +571,13 @@ class ConversationService:
                 if conversation_id in pins:
                     pins.remove(conversation_id)
                     self.save_pins(pins)
-            favorites = await self.get_favorites()
-            await ws.send_json({
-                "type": "pin_updated",
-                "conversation_id": conversation_id,
-                "pinned": False,
-                "favorites": favorites,
-            })
+                favorites = await self.get_favorites()
+                await ws.send_json({
+                    "type": "pin_updated",
+                    "conversation_id": conversation_id,
+                    "pinned": False,
+                    "favorites": favorites,
+                })
         except Exception as exc:
             logger.warning(f"Failed to unpin conversation: {exc}")
             try:

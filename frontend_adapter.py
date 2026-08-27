@@ -225,7 +225,10 @@ class FrontendAdapter(Platform):
                     elif kind == "list_conversations":
                         cur = data.get("cursor")
                         limit = data.get("limit", 20)
-                        await self.conversations.send_conversations_list(ws, cursor=cur, limit=limit)
+                        gen = data.get("generation")
+                        await self.conversations.send_conversations_list(
+                            ws, cursor=cur, limit=limit, generation=gen,
+                        )
 
                     elif kind == "switch_conversation":
                         cid = data.get("conversation_id")
