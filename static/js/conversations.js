@@ -21,6 +21,7 @@ function setupSentinel() {
         entries[0].isIntersecting &&
         state.hasMore &&
         !state.isLoadingMore &&
+        !state.listError &&
         isConnected()
       ) {
         state.isLoadingMore = true;
@@ -52,6 +53,7 @@ export function openPanel() {
   state.nextCursor = null;
   state.hasMore = true;
   state.isLoadingMore = true;
+  state.listError = false;
   // Clear old DOM immediately, reset scroll to top
   dom.convList.scrollTop = 0;
   renderSidebar({ preserveScroll: false });

@@ -97,22 +97,26 @@ function handleMessage(data) {
       break;
 
     case "conversations_list_failed":
-      // Only clear loading if generation matches (not stale)
+      // Only handle if generation matches (not stale)
       if (data.generation === undefined || data.generation === state.listGeneration) {
         state.isLoadingMore = false;
+        state.listError = true;
         renderSidebar();
       }
       break;
 
     case "navigation_failed":
-      state.pendingConversationId = null;
+      // Only clear pending/anchor if they match the failed navigation
+      if (state.pendingConversationId === data.conversation_id) {
+        state.pendingConversationId = null;
+      }
+      if (state.activeAnchorId === data.conversation_id) {
+        state.activeAnchorId = null;
+      }
       renderSidebar();
       break;
 
     case "conversation_switched":
-      // Pointer updated server-side; history will follow
-      state.isReadonly = false;
-      setComposerReadonly(false);
       closePanel();
       break;
 

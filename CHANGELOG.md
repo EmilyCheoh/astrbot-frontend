@@ -17,6 +17,8 @@ debugging
 - Backend sends conversations_list_failed / navigation_failed on errors
 - Frontend clears pending states on failure responses
 
+* 继续优化sidebar
+
 ---
 
 V9

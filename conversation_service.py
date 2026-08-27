@@ -160,19 +160,38 @@ class ConversationService:
             )
         return None
 
+    # -- Navigation failure helper --------------------------------------------
+
+    @staticmethod
+    async def _send_navigation_failed(
+        ws: web.WebSocketResponse, conversation_id: str | None,
+    ):
+        """Send a terminal navigation failure to the frontend."""
+        try:
+            await ws.send_json({
+                "type": "navigation_failed",
+                "conversation_id": conversation_id,
+            })
+        except Exception:
+            pass
+
     # -- History loading -------------------------------------------------------
 
-    async def send_history(self, ws: web.WebSocketResponse, conversation_id: str | None = None):
+    async def send_history(
+        self, ws: web.WebSocketResponse, conversation_id: str | None = None,
+    ) -> bool:
         """Load conversation history from the DB and send to client.
 
         If *conversation_id* is given, load that specific conversation.
         Otherwise fall back to the most recently updated one.
+
+        Returns True on success, False on failure.
         """
         try:
             db_path = self.find_db()
             if not db_path:
                 logger.warning("Chat history DB not found, tried common paths")
-                return
+                return False
 
             platform_id = self._config.get("id", "abyss_web")
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
@@ -210,8 +229,10 @@ class ConversationService:
                     "platform_id": platform_id,
                     "conversation_id": conversation_id,
                 })
+            return True
         except Exception as exc:
             logger.warning(f"Failed to load chat history: {exc}")
+            return False
 
     # -- Favorites -------------------------------------------------------------
 
@@ -271,7 +292,7 @@ class ConversationService:
 
             db_path = self.find_db()
             if not db_path:
-                return
+                raise FileNotFoundError("Chat history DB not found")
 
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
             active_cid = await self._get_active_cid()
@@ -347,25 +368,23 @@ class ConversationService:
         try:
             if not runtime.conversation_manager:
                 logger.warning("Conversation manager not available yet")
+                await self._send_navigation_failed(ws, conversation_id)
                 return
 
             await runtime.conversation_manager.switch_conversation(
                 self._umo, conversation_id,
             )
-            await ws.send_json({
-                "type": "conversation_switched",
-                "conversation_id": conversation_id,
-            })
-            await self.send_history(ws, conversation_id)
-        except Exception as exc:
-            logger.warning(f"Failed to switch conversation: {exc}")
-            try:
+            ok = await self.send_history(ws, conversation_id)
+            if ok:
                 await ws.send_json({
-                    "type": "navigation_failed",
+                    "type": "conversation_switched",
                     "conversation_id": conversation_id,
                 })
-            except Exception:
-                pass
+            else:
+                await self._send_navigation_failed(ws, conversation_id)
+        except Exception as exc:
+            logger.warning(f"Failed to switch conversation: {exc}")
+            await self._send_navigation_failed(ws, conversation_id)
 
     async def handle_new(self, ws: web.WebSocketResponse):
         """Create a new conversation and switch to it."""
@@ -499,6 +518,7 @@ class ConversationService:
         try:
             db_path = self.find_db()
             if not db_path:
+                await self._send_navigation_failed(ws, conversation_id)
                 return
 
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
@@ -522,21 +542,11 @@ class ConversationService:
                     "conversation_id": conversation_id,
                 })
             else:
-                await ws.send_json({
-                    "type": "history",
-                    "messages": [],
-                    "readonly": True,
-                    "platform_id": None,
-                })
+                # Row missing or empty — treat as navigation failure
+                await self._send_navigation_failed(ws, conversation_id)
         except Exception as exc:
             logger.warning(f"Failed to view history: {exc}")
-            try:
-                await ws.send_json({
-                    "type": "navigation_failed",
-                    "conversation_id": conversation_id,
-                })
-            except Exception:
-                pass
+            await self._send_navigation_failed(ws, conversation_id)
 
     # -- Pin / Unpin -----------------------------------------------------------
 

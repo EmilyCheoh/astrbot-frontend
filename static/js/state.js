@@ -32,6 +32,7 @@ export const state = {
   nextCursor: null,
   hasMore: true,
   isLoadingMore: false,
+  listError: false,     // Set on list failure — blocks sentinel until sidebar reopened
 
   // Pin operation tracking (per-conversation)
   pendingPinIds: new Set(),
