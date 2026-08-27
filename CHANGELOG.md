@@ -1,3 +1,7 @@
+UI improvement
+
+---
+
 debugging
 
 * sidebar now highlights active conversation

@@ -363,6 +363,17 @@ function toggleConvMenu(anchorEl, conv) {
 
   const isPending = state.pendingPinIds.has(conv.id);
 
+  // Rename
+  const renameItem = document.createElement("button");
+  renameItem.className = "conv-menu-item";
+  renameItem.innerHTML = ICON_RENAME + " Rename";
+  renameItem.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const convEl = anchorEl.closest(".conv-item");
+    startRename(conv, convEl);
+  });
+  menu.appendChild(renameItem);
+
   // Star
   const starItem = document.createElement("button");
   starItem.className = "conv-menu-item";
@@ -384,17 +395,6 @@ function toggleConvMenu(anchorEl, conv) {
   });
   menu.appendChild(starItem);
 
-  // Rename
-  const renameItem = document.createElement("button");
-  renameItem.className = "conv-menu-item";
-  renameItem.innerHTML = ICON_RENAME + " Rename";
-  renameItem.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const convEl = anchorEl.closest(".conv-item");
-    startRename(conv, convEl);
-  });
-  menu.appendChild(renameItem);
-
   // Separator
   const sep = document.createElement("div");
   sep.className = "conv-menu-separator";
@@ -414,13 +414,17 @@ function toggleConvMenu(anchorEl, conv) {
   document.body.appendChild(menu);
 
   const menuW = menu.offsetWidth;
-  let left = rect.right - menuW;
-  let top = rect.bottom + 4;
+  const menuH = menu.offsetHeight;
+  let left = rect.right + 4;
+  let top = rect.top;
 
+  // Keep within viewport
+  if (left + menuW > window.innerWidth - 4) left = rect.left - menuW - 4;
   if (left < 4) left = 4;
-  if (top + menu.offsetHeight > window.innerHeight - 4) {
-    top = rect.top - menu.offsetHeight - 4;
+  if (top + menuH > window.innerHeight - 4) {
+    top = window.innerHeight - menuH - 4;
   }
+  if (top < 4) top = 4;
 
   menu.style.left = left + "px";
   menu.style.top = top + "px";
@@ -522,7 +526,7 @@ function startRename(conv, convItemEl) {
 
 // ---- Delete ----
 
-function showDeleteDialog(conv) {
+export function showDeleteDialog(conv) {
   closeDeleteDialog();
   const overlay = document.createElement("div");
   overlay.className = "delete-dialog-overlay";

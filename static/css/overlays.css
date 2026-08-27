@@ -288,3 +288,25 @@
   flex-shrink: 0;
   color: var(--text-muted);
 }
+
+.more-menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border-subtle);
+}
+
+.more-menu-item.danger {
+  color: #c0392b;
+}
+
+.more-menu-item.danger svg {
+  color: #c0392b;
+}
+
+.more-menu-item.danger:hover {
+  background: #fdf0ef;
+}
+
+[data-theme="dark"] .more-menu-item.danger:hover {
+  background: #3a2020;
+}

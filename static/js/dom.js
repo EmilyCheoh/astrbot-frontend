@@ -37,5 +37,7 @@ export const dom = {
   searchDateApply:    document.getElementById("search-date-apply"),
   moreMenuBtn:        document.getElementById("more-menu-btn"),
   moreMenu:           document.getElementById("more-menu"),
+  morePinBtn:         document.getElementById("more-pin-btn"),
   exportMdBtn:        document.getElementById("export-md-btn"),
+  moreDeleteBtn:      document.getElementById("more-delete-btn"),
 };

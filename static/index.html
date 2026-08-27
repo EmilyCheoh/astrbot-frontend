@@ -47,6 +47,13 @@
         <div class="more-menu-wrapper">
           <button id="more-menu-btn" class="icon-btn more-dots" title="More">&middot;&middot;&middot;</button>
           <div id="more-menu" class="more-menu hidden">
+            <button id="more-pin-btn" class="more-menu-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+              Pin
+            </button>
             <button id="export-md-btn" class="more-menu-item">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -54,7 +61,16 @@
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              Export as Markdown
+              Export
+            </button>
+            <div class="more-menu-separator"></div>
+            <button id="more-delete-btn" class="more-menu-item danger">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+              Delete
             </button>
           </div>
         </div>
