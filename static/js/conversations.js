@@ -1,17 +1,57 @@
 /* ================================================================
    Den — Conversations
-   Sidebar, switch, pin, rename, delete, pagination.
+   Sidebar: Favorites + All conversations (infinite scroll),
+   switch, pin, rename, delete, anchor for search results.
    ================================================================ */
 
 import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { send, isConnected } from "./socket.js";
 
+// ---- Scroll sentinel observer ----
+
+let sentinelObserver = null;
+
+function setupSentinel() {
+  if (sentinelObserver) sentinelObserver.disconnect();
+
+  sentinelObserver = new IntersectionObserver(
+    (entries) => {
+      if (
+        entries[0].isIntersecting &&
+        state.hasMore &&
+        !state.isLoadingMore &&
+        isConnected()
+      ) {
+        state.isLoadingMore = true;
+        dom.convLoading.classList.remove("hidden");
+        send({
+          type: "list_conversations",
+          cursor: state.nextCursor,
+          limit: 20,
+        });
+      }
+    },
+    { root: dom.convList, threshold: 0 }
+  );
+
+  if (dom.convSentinel) {
+    sentinelObserver.observe(dom.convSentinel);
+  }
+}
+
 // ---- Panel open / close ----
 
 export function openPanel() {
   if (!isConnected()) return;
-  send({ type: "list_conversations", page: state.currentPage, limit: 20 });
+  // Always reset and fetch the latest first batch
+  state.conversationIds = [];
+  state.nextCursor = null;
+  state.hasMore = true;
+  state.isLoadingMore = true;
+  dom.convLoading.classList.remove("hidden");
+  dom.convEnd.classList.add("hidden");
+  send({ type: "list_conversations", limit: 20 });
   dom.convPanel.classList.add("open");
   dom.panelOverlay.classList.remove("hidden");
   dom.panelOverlay.classList.add("open");
@@ -44,34 +84,107 @@ function formatTime(ts) {
   }
 }
 
-// ---- Render conversation list ----
+function getConv(id) {
+  return state.conversationById.get(id);
+}
 
-export function renderConvList(data) {
-  const { conversations, page, pages } = data;
-  dom.convList.innerHTML = "";
+// ---- Store helpers (called by main.js dispatch) ----
 
-  if (!conversations || conversations.length === 0) {
-    dom.convList.innerHTML = '<div class="conv-empty">No conversations</div>';
-    renderPagination(page || 1, pages || 1);
-    return;
+/**
+ * Merge a batch of conversation objects into the Map store.
+ * Called on conversations_list arrival.
+ */
+export function mergeConversations(conversations, nextCursor, hasMore) {
+  const incomingIds = [];
+
+  for (const conv of conversations) {
+    state.conversationById.set(conv.id, conv);
+    incomingIds.push(conv.id);
   }
 
-  const pinned = conversations.filter(c => c.pinned);
-  const unpinned = conversations.filter(c => !c.pinned);
+  if (!state.nextCursor) {
+    // First batch (no prior cursor) — replace
+    state.conversationIds = incomingIds;
+  } else {
+    // Subsequent batch — deduplicated append
+    const existing = new Set(state.conversationIds);
+    for (const id of incomingIds) {
+      if (!existing.has(id)) {
+        state.conversationIds.push(id);
+      }
+    }
+  }
 
-  if (pinned.length > 0) {
+  state.nextCursor = nextCursor;
+  state.hasMore = hasMore;
+  state.isLoadingMore = false;
+
+  renderSidebar();
+}
+
+/**
+ * Replace the favorites list entirely (called on favorites_list / pin_updated).
+ */
+export function setFavorites(favorites) {
+  state.favoriteIds = [];
+  for (const conv of favorites) {
+    state.conversationById.set(conv.id, conv);
+    state.favoriteIds.push(conv.id);
+  }
+  renderSidebar();
+}
+
+/**
+ * Update a single conversation in the Map (e.g. after rename).
+ */
+export function updateConversation(id, patch) {
+  const conv = state.conversationById.get(id);
+  if (conv) {
+    Object.assign(conv, patch);
+    renderSidebar();
+  }
+}
+
+/**
+ * Remove a conversation from all stores.
+ */
+export function removeConversation(id) {
+  state.conversationById.delete(id);
+  state.conversationIds = state.conversationIds.filter(cid => cid !== id);
+  state.favoriteIds = state.favoriteIds.filter(cid => cid !== id);
+  if (state.activeAnchorId === id) state.activeAnchorId = null;
+  if (state.pendingConversationId === id) state.pendingConversationId = null;
+  renderSidebar();
+}
+
+// ---- Full sidebar render ----
+
+export function renderSidebar() {
+  // Preserve scroll position
+  const scrollTop = dom.convList.scrollTop;
+
+  // Clear everything except the sentinel
+  const sentinel = dom.convSentinel;
+  dom.convList.innerHTML = "";
+
+  // -- Favorites section --
+  const favConvs = state.favoriteIds
+    .map(id => getConv(id))
+    .filter(Boolean);
+
+  if (favConvs.length > 0) {
     const isExpanded = localStorage.getItem("den-pinned-expanded") !== "false";
 
     const header = document.createElement("div");
     header.className = "pinned-header";
     header.innerHTML =
       '<span class="pinned-arrow' + (isExpanded ? " expanded" : "") +
-      '">\u25B6</span> Favorites (' + pinned.length + ")";
+      '">\u25B6</span> Favorites (' + favConvs.length + ")";
 
     const container = document.createElement("div");
     container.className = "pinned-items" + (isExpanded ? " expanded" : "");
 
-    for (const conv of pinned) {
+    for (const conv of favConvs) {
       container.appendChild(createConvItem(conv));
     }
 
@@ -85,17 +198,76 @@ export function renderConvList(data) {
     dom.convList.appendChild(container);
   }
 
-  for (const conv of unpinned) {
-    dom.convList.appendChild(createConvItem(conv));
+  // -- "All conversations" label (only if favorites exist) --
+  if (favConvs.length > 0) {
+    const allLabel = document.createElement("div");
+    allLabel.className = "conv-section-label";
+    allLabel.textContent = "All conversations";
+    dom.convList.appendChild(allLabel);
   }
 
-  renderPagination(page || 1, pages || 1);
+  // -- Active anchor (search result not in loaded list) --
+  const showAnchor =
+    state.activeAnchorId &&
+    !state.conversationIds.includes(state.activeAnchorId);
+  if (showAnchor) {
+    const anchorConv = getConv(state.activeAnchorId);
+    if (anchorConv) {
+      const anchorEl = createConvItem(anchorConv);
+      anchorEl.classList.add("conv-anchor");
+      dom.convList.appendChild(anchorEl);
+
+      // Separator
+      const sep = document.createElement("div");
+      sep.className = "conv-anchor-sep";
+      dom.convList.appendChild(sep);
+    }
+  }
+
+  // -- All conversations (cursor-loaded) --
+  const allConvs = state.conversationIds
+    .map(id => getConv(id))
+    .filter(Boolean);
+
+  if (allConvs.length === 0 && favConvs.length === 0 && !state.isLoadingMore) {
+    const empty = document.createElement("div");
+    empty.className = "conv-empty";
+    empty.textContent = "No conversations";
+    dom.convList.appendChild(empty);
+  } else {
+    for (const conv of allConvs) {
+      dom.convList.appendChild(createConvItem(conv));
+    }
+  }
+
+  // -- Re-attach sentinel at the end --
+  dom.convList.appendChild(sentinel);
+
+  // -- Loading / end indicators --
+  if (state.isLoadingMore) {
+    dom.convLoading.classList.remove("hidden");
+  } else {
+    dom.convLoading.classList.add("hidden");
+  }
+
+  if (!state.hasMore && state.conversationIds.length > 0) {
+    dom.convEnd.classList.remove("hidden");
+  } else {
+    dom.convEnd.classList.add("hidden");
+  }
+
+  // Restore scroll
+  dom.convList.scrollTop = scrollTop;
+
+  // Re-observe sentinel
+  setupSentinel();
 }
 
 // ---- Conversation item ----
 
 function createConvItem(conv) {
-  const isSelected = conv.id === state.currentConversationId;
+  const selectedId = state.pendingConversationId || state.currentConversationId;
+  const isSelected = conv.id === selectedId;
   const btn = document.createElement("div");
   btn.className = "conv-item" + (isSelected ? " active" : "");
   btn.setAttribute("role", "button");
@@ -141,11 +313,14 @@ function createConvItem(conv) {
     if (!isConnected()) return;
 
     if (conv.platform_id === "Abyss") {
+      state.pendingConversationId = conv.id;
       send({ type: "view_history", conversation_id: conv.id });
       closePanel();
     } else {
+      state.pendingConversationId = conv.id;
       send({ type: "switch_conversation", conversation_id: conv.id });
     }
+    renderSidebar();
   });
 
   return btn;
@@ -171,13 +346,21 @@ function toggleConvMenu(anchorEl, conv) {
   const menu = document.createElement("div");
   menu.className = "conv-menu";
 
+  const isPending = state.pendingPinIds.has(conv.id);
+
   // Star
   const starItem = document.createElement("button");
   starItem.className = "conv-menu-item";
-  starItem.innerHTML = (conv.pinned ? ICON_STAR_FILLED : ICON_STAR) + " " + (conv.pinned ? "Unstar" : "Star");
+  if (isPending) {
+    starItem.innerHTML = (conv.pinned ? ICON_STAR_FILLED : ICON_STAR) + " ...";
+    starItem.disabled = true;
+  } else {
+    starItem.innerHTML = (conv.pinned ? ICON_STAR_FILLED : ICON_STAR) + " " + (conv.pinned ? "Unstar" : "Star");
+  }
   starItem.addEventListener("click", (e) => {
     e.stopPropagation();
-    if (!isConnected()) return;
+    if (!isConnected() || isPending) return;
+    state.pendingPinIds.add(conv.id);
     send({
       type: conv.pinned ? "unpin_conversation" : "pin_conversation",
       conversation_id: conv.id,
@@ -381,39 +564,6 @@ function closeDeleteDialog() {
   if (existing) existing.remove();
 }
 
-// ---- Pagination ----
-
-function renderPagination(page, pages) {
-  dom.pagination.innerHTML = "";
-  if (pages <= 1) return;
-
-  state.currentPage = page;
-
-  const prev = document.createElement("button");
-  prev.className = "page-btn";
-  prev.textContent = "\u2039";
-  prev.disabled = page <= 1;
-  prev.addEventListener("click", () => {
-    if (!isConnected()) return;
-    send({ type: "list_conversations", page: page - 1, limit: 20 });
-  });
-
-  const info = document.createElement("span");
-  info.className = "page-info";
-  info.textContent = page + " / " + pages;
-
-  const next = document.createElement("button");
-  next.className = "page-btn";
-  next.textContent = "\u203A";
-  next.disabled = page >= pages;
-  next.addEventListener("click", () => {
-    if (!isConnected()) return;
-    send({ type: "list_conversations", page: page + 1, limit: 20 });
-  });
-
-  dom.pagination.append(prev, info, next);
-}
-
 // ---- Bind events ----
 
 export function initConversations() {
@@ -424,7 +574,7 @@ export function initConversations() {
     send({ type: "new_conversation" });
   });
 
-  // Close context menu on outside click (partial — rest in main.js)
+  // Close context menu on outside click
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".conv-menu") && !e.target.closest(".conv-menu-btn")) {
       closeConvMenu();

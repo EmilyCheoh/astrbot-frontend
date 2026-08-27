@@ -4,9 +4,11 @@ All conversation-related operations extracted from FrontendAdapter.
 Uses runtime.conversation_manager dynamically at call time (never cached).
 """
 
+import asyncio
 import json
-import math
+import os
 import sqlite3
+import tempfile
 from pathlib import Path
 
 from aiohttp import web
@@ -22,6 +24,7 @@ class ConversationService:
     def __init__(self, config: dict, umo: str) -> None:
         self._config = config
         self._umo = umo
+        self._pins_lock = asyncio.Lock()
 
     # -- DB location -----------------------------------------------------------
 
@@ -56,8 +59,73 @@ class ConversationService:
         return []
 
     def save_pins(self, pins: list[str]):
+        """Atomic pin file write: temp file in same dir + os.replace."""
         path = self._pins_path()
-        path.write_text(json.dumps(pins))
+        fd = None
+        tmp = None
+        try:
+            fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+            os.write(fd, json.dumps(pins).encode())
+            os.close(fd)
+            fd = None
+            os.replace(tmp, str(path))
+            tmp = None
+        finally:
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            if tmp is not None:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+
+    # -- Serialization ---------------------------------------------------------
+
+    @staticmethod
+    def _extract_preview(title: str | None, content: str | None) -> str:
+        """Extract preview text from title or first user message in content."""
+        if title:
+            return title
+        if content:
+            try:
+                msgs = json.loads(content)
+                for m in msgs:
+                    if m.get("role") == "user":
+                        c = m.get("content", "")
+                        if isinstance(c, list):
+                            c = "".join(
+                                b.get("text", "") for b in c
+                                if isinstance(b, dict) and b.get("type") == "text"
+                            )
+                        preview = c[:40].strip()
+                        if preview:
+                            return preview
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return "(empty)"
+
+    def _serialize_conversation(
+        self,
+        row: tuple,
+        pinned_ids: list[str],
+        active_cid: str | None,
+    ) -> dict:
+        """Serialize a DB row into a conversation summary dict.
+
+        Expected row: (conversation_id, title, updated_at, platform_id, content)
+        """
+        cid, title, updated_at, platform_id, content = row
+        return {
+            "id": cid,
+            "preview": self._extract_preview(title, content),
+            "updated_at": updated_at,
+            "platform_id": platform_id,
+            "active": cid == active_cid,
+            "pinned": cid in pinned_ids,
+        }
 
     # -- Helpers ---------------------------------------------------------------
 
@@ -83,6 +151,14 @@ class ConversationService:
         if platform_id == "Abyss":
             return "Abyss:FriendMessage:396070723"
         return self._umo
+
+    async def _get_active_cid(self) -> str | None:
+        """Get the current active conversation ID."""
+        if runtime.conversation_manager:
+            return await runtime.conversation_manager.get_curr_conversation_id(
+                self._umo
+            )
+        return None
 
     # -- History loading -------------------------------------------------------
 
@@ -127,7 +203,6 @@ class ConversationService:
                     "conversation_id": row[1],
                 })
             else:
-                # No history — send empty so frontend knows to clear
                 await ws.send_json({
                     "type": "history",
                     "messages": [],
@@ -138,82 +213,118 @@ class ConversationService:
         except Exception as exc:
             logger.warning(f"Failed to load chat history: {exc}")
 
-    # -- Conversation list -----------------------------------------------------
+    # -- Favorites -------------------------------------------------------------
 
-    async def send_conversations_list(self, ws: web.WebSocketResponse, page: int = 1, limit: int = 20):
-        """Send a paginated list of all conversations (Den + QQ) to the frontend."""
+    async def get_favorites(self) -> list[dict]:
+        """Query all favorited conversations with full summary objects."""
+        pinned_ids = self.load_pins()
+        if not pinned_ids:
+            return []
+
+        db_path = self.find_db()
+        if not db_path:
+            return []
+
+        active_cid = await self._get_active_cid()
+
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        placeholders = ",".join("?" * len(pinned_ids))
+        cursor = conn.execute(
+            f"SELECT conversation_id, title, updated_at, platform_id, content "
+            f"FROM conversations "
+            f"WHERE conversation_id IN ({placeholders}) "
+            f"AND platform_id IN ('Abyss', 'Abyss_Den') "
+            f"ORDER BY updated_at DESC",
+            pinned_ids,
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [
+            self._serialize_conversation(row, pinned_ids, active_cid)
+            for row in rows
+        ]
+
+    async def send_favorites(self, ws: web.WebSocketResponse):
+        """Push the full favorites list to the client (called after auth)."""
         try:
+            favorites = await self.get_favorites()
+            await ws.send_json({
+                "type": "favorites_list",
+                "favorites": favorites,
+            })
+        except Exception as exc:
+            logger.warning(f"Failed to send favorites: {exc}")
+
+    # -- Conversation list (cursor pagination) ---------------------------------
+
+    async def send_conversations_list(
+        self,
+        ws: web.WebSocketResponse,
+        cursor: str | None = None,
+        limit: int = 20,
+    ):
+        """Send a cursor-paginated list of conversations."""
+        try:
+            limit = max(1, min(limit, 50))
+
             db_path = self.find_db()
             if not db_path:
                 return
 
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            active_cid = await self._get_active_cid()
+            pinned_ids = self.load_pins()
 
-            # Count total across both platforms
-            cursor = conn.execute(
-                "SELECT COUNT(*) FROM conversations "
-                "WHERE platform_id IN ('Abyss', 'Abyss_Den')"
-            )
-            total = cursor.fetchone()[0]
+            # Cursor format: "updated_at|conversation_id"
+            if cursor:
+                parts = cursor.split("|", 1)
+                if len(parts) == 2:
+                    cursor_ts, cursor_cid = parts
+                    db_cursor = conn.execute(
+                        "SELECT conversation_id, title, updated_at, platform_id, content "
+                        "FROM conversations "
+                        "WHERE platform_id IN ('Abyss', 'Abyss_Den') "
+                        "AND (updated_at < ? OR (updated_at = ? AND conversation_id < ?)) "
+                        "ORDER BY updated_at DESC, conversation_id DESC "
+                        "LIMIT ?",
+                        (cursor_ts, cursor_ts, cursor_cid, limit + 1),
+                    )
+                else:
+                    cursor = None  # Invalid format, fall through
 
-            pages = max(1, math.ceil(total / limit))
-            page = max(1, min(page, pages))
-            offset = (page - 1) * limit
-
-            cursor = conn.execute(
-                "SELECT conversation_id, title, updated_at, platform_id, content "
-                "FROM conversations "
-                "WHERE platform_id IN ('Abyss', 'Abyss_Den') "
-                "ORDER BY updated_at DESC "
-                "LIMIT ? OFFSET ?",
-                (limit, offset),
-            )
-            rows = cursor.fetchall()
-            conn.close()
-
-            # Active conversation pointer (Den only)
-            active_cid = None
-            if runtime.conversation_manager:
-                active_cid = await runtime.conversation_manager.get_curr_conversation_id(
-                    self._umo
+            if not cursor:
+                db_cursor = conn.execute(
+                    "SELECT conversation_id, title, updated_at, platform_id, content "
+                    "FROM conversations "
+                    "WHERE platform_id IN ('Abyss', 'Abyss_Den') "
+                    "ORDER BY updated_at DESC, conversation_id DESC "
+                    "LIMIT ?",
+                    (limit + 1,),
                 )
 
-            pinned = self.load_pins()
+            rows = db_cursor.fetchall()
+            conn.close()
 
-            conversations = []
-            for cid, title, updated_at, pid, content in rows:
-                preview = title or ""
-                if not preview and content:
-                    try:
-                        msgs = json.loads(content)
-                        for m in msgs:
-                            if m.get("role") == "user":
-                                c = m.get("content", "")
-                                if isinstance(c, list):
-                                    c = "".join(
-                                        b.get("text", "") for b in c
-                                        if isinstance(b, dict) and b.get("type") == "text"
-                                    )
-                                preview = c[:40].strip()
-                                break
-                    except (json.JSONDecodeError, TypeError):
-                        pass
+            has_more = len(rows) > limit
+            if has_more:
+                rows = rows[:limit]
 
-                conversations.append({
-                    "id": cid,
-                    "preview": preview or "(empty)",
-                    "updated_at": updated_at,
-                    "platform_id": pid,
-                    "active": cid == active_cid,
-                    "pinned": cid in pinned,
-                })
+            conversations = [
+                self._serialize_conversation(row, pinned_ids, active_cid)
+                for row in rows
+            ]
+
+            next_cursor = None
+            if has_more and rows:
+                last = rows[-1]
+                next_cursor = f"{last[2]}|{last[0]}"
 
             await ws.send_json({
                 "type": "conversations_list",
                 "conversations": conversations,
-                "page": page,
-                "pages": pages,
-                "total": total,
+                "next_cursor": next_cursor,
+                "has_more": has_more,
             })
         except Exception as exc:
             logger.warning(f"Failed to list conversations: {exc}")
@@ -269,12 +380,8 @@ class ConversationService:
                 return
 
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-            pinned = self.load_pins()
-            active_cid = None
-            if runtime.conversation_manager:
-                active_cid = await runtime.conversation_manager.get_curr_conversation_id(
-                    self._umo
-                )
+            pinned_ids = self.load_pins()
+            active_cid = await self._get_active_cid()
 
             results: list[dict] = []
 
@@ -283,19 +390,17 @@ class ConversationService:
                     conn.close()
                     await ws.send_json({"type": "search_results", "results": [], "mode": mode})
                     return
-                cursor = conn.execute(
-                    "SELECT conversation_id, title, updated_at, platform_id "
+                db_cursor = conn.execute(
+                    "SELECT conversation_id, title, updated_at, platform_id, content "
                     "FROM conversations "
                     "WHERE platform_id IN ('Abyss', 'Abyss_Den') AND title LIKE ? "
                     "ORDER BY updated_at DESC LIMIT 30",
                     (f"%{query}%",),
                 )
-                for cid, title, updated_at, pid in cursor.fetchall():
-                    results.append({
-                        "id": cid, "preview": title or cid[:20],
-                        "updated_at": updated_at, "platform_id": pid,
-                        "active": cid == active_cid, "pinned": cid in pinned,
-                    })
+                for row in db_cursor.fetchall():
+                    results.append(
+                        self._serialize_conversation(row, pinned_ids, active_cid)
+                    )
 
             elif mode == "content":
                 if not query:
@@ -303,7 +408,7 @@ class ConversationService:
                     await ws.send_json({"type": "search_results", "results": [], "mode": mode})
                     return
                 escaped = self.to_unicode_escaped(query)
-                cursor = conn.execute(
+                db_cursor = conn.execute(
                     "SELECT conversation_id, title, updated_at, platform_id, content "
                     "FROM conversations "
                     "WHERE platform_id IN ('Abyss', 'Abyss_Den') "
@@ -311,38 +416,38 @@ class ConversationService:
                     "ORDER BY updated_at DESC LIMIT 30",
                     (f"%{query}%", f"%{escaped}%"),
                 )
-                for cid, title, updated_at, pid, content in cursor.fetchall():
+                for row in db_cursor.fetchall():
+                    conv = self._serialize_conversation(row, pinned_ids, active_cid)
+                    # Extract snippet from content
+                    content = row[4]
                     snippet = ""
-                    try:
-                        msgs = json.loads(content)
-                        for m in msgs:
-                            text = ""
-                            mc = m.get("content", "")
-                            if isinstance(mc, str):
-                                text = mc
-                            elif isinstance(mc, list):
-                                text = " ".join(
-                                    b.get("text", "") or b.get("content", "")
-                                    for b in mc if isinstance(b, dict)
-                                )
-                            idx = text.lower().find(query.lower())
-                            if idx != -1:
-                                start = max(0, idx - 40)
-                                end = min(len(text), idx + len(query) + 40)
-                                snippet = (
-                                    ("..." if start > 0 else "")
-                                    + text[start:end]
-                                    + ("..." if end < len(text) else "")
-                                )
-                                break
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                    results.append({
-                        "id": cid, "preview": title or cid[:20],
-                        "updated_at": updated_at, "platform_id": pid,
-                        "active": cid == active_cid, "pinned": cid in pinned,
-                        "snippet": snippet,
-                    })
+                    if content:
+                        try:
+                            msgs = json.loads(content)
+                            for m in msgs:
+                                text = ""
+                                mc = m.get("content", "")
+                                if isinstance(mc, str):
+                                    text = mc
+                                elif isinstance(mc, list):
+                                    text = " ".join(
+                                        b.get("text", "") or b.get("content", "")
+                                        for b in mc if isinstance(b, dict)
+                                    )
+                                idx = text.lower().find(query.lower())
+                                if idx != -1:
+                                    start = max(0, idx - 40)
+                                    end = min(len(text), idx + len(query) + 40)
+                                    snippet = (
+                                        ("..." if start > 0 else "")
+                                        + text[start:end]
+                                        + ("..." if end < len(text) else "")
+                                    )
+                                    break
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    conv["snippet"] = snippet
+                    results.append(conv)
 
             elif mode == "date":
                 date_from = data.get("date_from", "")
@@ -351,20 +456,18 @@ class ConversationService:
                     conn.close()
                     await ws.send_json({"type": "search_results", "results": [], "mode": mode})
                     return
-                cursor = conn.execute(
-                    "SELECT conversation_id, title, updated_at, platform_id "
+                db_cursor = conn.execute(
+                    "SELECT conversation_id, title, updated_at, platform_id, content "
                     "FROM conversations "
                     "WHERE platform_id IN ('Abyss', 'Abyss_Den') "
                     "AND updated_at >= ? AND updated_at <= ? "
                     "ORDER BY updated_at DESC LIMIT 50",
                     (date_from, date_to + "T23:59:59"),
                 )
-                for cid, title, updated_at, pid in cursor.fetchall():
-                    results.append({
-                        "id": cid, "preview": title or cid[:20],
-                        "updated_at": updated_at, "platform_id": pid,
-                        "active": cid == active_cid, "pinned": cid in pinned,
-                    })
+                for row in db_cursor.fetchall():
+                    results.append(
+                        self._serialize_conversation(row, pinned_ids, active_cid)
+                    )
 
             conn.close()
             await ws.send_json({"type": "search_results", "results": results, "mode": mode})
@@ -413,18 +516,52 @@ class ConversationService:
     # -- Pin / Unpin -----------------------------------------------------------
 
     async def handle_pin(self, ws: web.WebSocketResponse, conversation_id: str):
-        pins = self.load_pins()
-        if conversation_id not in pins:
-            pins.append(conversation_id)
-            self.save_pins(pins)
-        await ws.send_json({"type": "pin_updated", "pinned": pins})
+        try:
+            async with self._pins_lock:
+                pins = self.load_pins()
+                if conversation_id not in pins:
+                    pins.append(conversation_id)
+                    self.save_pins(pins)
+            favorites = await self.get_favorites()
+            await ws.send_json({
+                "type": "pin_updated",
+                "conversation_id": conversation_id,
+                "pinned": True,
+                "favorites": favorites,
+            })
+        except Exception as exc:
+            logger.warning(f"Failed to pin conversation: {exc}")
+            try:
+                await ws.send_json({
+                    "type": "pin_update_failed",
+                    "conversation_id": conversation_id,
+                })
+            except Exception:
+                pass
 
     async def handle_unpin(self, ws: web.WebSocketResponse, conversation_id: str):
-        pins = self.load_pins()
-        if conversation_id in pins:
-            pins.remove(conversation_id)
-            self.save_pins(pins)
-        await ws.send_json({"type": "pin_updated", "pinned": pins})
+        try:
+            async with self._pins_lock:
+                pins = self.load_pins()
+                if conversation_id in pins:
+                    pins.remove(conversation_id)
+                    self.save_pins(pins)
+            favorites = await self.get_favorites()
+            await ws.send_json({
+                "type": "pin_updated",
+                "conversation_id": conversation_id,
+                "pinned": False,
+                "favorites": favorites,
+            })
+        except Exception as exc:
+            logger.warning(f"Failed to unpin conversation: {exc}")
+            try:
+                await ws.send_json({
+                    "type": "pin_update_failed",
+                    "conversation_id": conversation_id,
+                })
+            except Exception:
+                pass
 
     # -- Rename / Delete -------------------------------------------------------
 
@@ -457,10 +594,11 @@ class ConversationService:
                 umo, conversation_id,
             )
             # Remove from pins if pinned
-            pins = self.load_pins()
-            if conversation_id in pins:
-                pins.remove(conversation_id)
-                self.save_pins(pins)
+            async with self._pins_lock:
+                pins = self.load_pins()
+                if conversation_id in pins:
+                    pins.remove(conversation_id)
+                    self.save_pins(pins)
             await ws.send_json({
                 "type": "conversation_deleted",
                 "conversation_id": conversation_id,

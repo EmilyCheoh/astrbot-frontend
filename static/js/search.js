@@ -1,6 +1,7 @@
 /* ================================================================
    Den — Search
    Search overlay + results.
+   Sets activeAnchorId + pendingConversationId on result click.
    ================================================================ */
 
 import { state } from "./state.js";
@@ -139,6 +140,14 @@ export function renderSearchResults(results) {
 
     item.addEventListener("click", () => {
       state.currentConvTitle = r.preview || "conversation";
+
+      // Store the full result object in the Map for anchor rendering
+      state.conversationById.set(r.id, r);
+
+      // Set pending + anchor state
+      state.pendingConversationId = r.id;
+      state.activeAnchorId = r.id;
+
       closeSearch();
 
       if (!isConnected()) return;

@@ -15,8 +15,9 @@ import {
 } from "./messages.js";
 import { sendMessage, initComposer } from "./composer.js";
 import {
-  openPanel, closePanel, renderConvList, closeConvMenu,
-  initConversations,
+  openPanel, closePanel, closeConvMenu,
+  initConversations, mergeConversations, setFavorites,
+  updateConversation, removeConversation, renderSidebar,
 } from "./conversations.js";
 import { renderSearchResults, closeSearch, initSearch } from "./search.js";
 import { initExport } from "./export.js";
@@ -30,6 +31,10 @@ function handleMessage(data) {
       dom.chat.classList.remove("hidden");
       dom.thinkingIndicator.classList.add("hidden");
       dom.msgInput.focus();
+      // Clear stale state from previous connection
+      state.pendingPinIds.clear();
+      state.pendingConversationId = null;
+      state.activeAnchorId = null;
       break;
 
     case "error":
@@ -65,21 +70,29 @@ function handleMessage(data) {
 
     case "history":
       state.currentConversationId = data.conversation_id || null;
+      state.pendingConversationId = null;
       state.currentMessages = data.messages || [];
       state.isReadonly = data.readonly || false;
       dom.messages.innerHTML = "";
       renderHistory(state.currentMessages);
       setComposerReadonly(state.isReadonly);
-      if (state.lastConvListData) renderConvList(state.lastConvListData);
+      renderSidebar();
+      break;
+
+    case "favorites_list":
+      setFavorites(data.favorites || []);
       break;
 
     case "conversations_list":
-      state.lastConvListData = data;
-      renderConvList(data);
+      mergeConversations(
+        data.conversations || [],
+        data.next_cursor || null,
+        data.has_more !== false,
+      );
       break;
 
     case "conversation_switched":
-      state.currentConversationId = data.conversation_id || null;
+      // Pointer updated server-side; history will follow
       state.isReadonly = false;
       setComposerReadonly(false);
       closePanel();
@@ -87,6 +100,8 @@ function handleMessage(data) {
 
     case "conversation_created":
       state.currentConversationId = data.conversation_id || null;
+      state.pendingConversationId = null;
+      state.activeAnchorId = null;
       state.currentMessages = [];
       state.isReadonly = false;
       dom.messages.innerHTML = "";
@@ -98,37 +113,36 @@ function handleMessage(data) {
       renderSearchResults(data.results || [], data.mode);
       break;
 
-    case "pin_updated":
-      state.pinnedIds = data.pinned || [];
-      if (state.lastConvListData) {
-        for (const conv of state.lastConvListData.conversations) {
-          conv.pinned = state.pinnedIds.includes(conv.id);
-        }
-        renderConvList(state.lastConvListData);
+    case "pin_updated": {
+      // Clear pending state for this conversation
+      state.pendingPinIds.delete(data.conversation_id);
+      // Update the pinned flag in the Map
+      const pinnedConv = state.conversationById.get(data.conversation_id);
+      if (pinnedConv) {
+        pinnedConv.pinned = data.pinned;
       }
+      // Replace favorites with authoritative server data
+      setFavorites(data.favorites || []);
+      break;
+    }
+
+    case "pin_update_failed":
+      // Clear pending state — button unlocks, no change applied
+      state.pendingPinIds.delete(data.conversation_id);
+      renderSidebar();
       break;
 
-    case "conversation_renamed":
-      if (state.lastConvListData) {
-        const rc = state.lastConvListData.conversations.find(c => c.id === data.conversation_id);
-        if (rc) {
-          rc.preview = data.title || "(empty)";
-          renderConvList(state.lastConvListData);
-        }
-      }
+    case "conversation_renamed": {
+      const newTitle = data.title || "(empty)";
+      updateConversation(data.conversation_id, { preview: newTitle });
       break;
+    }
 
     case "conversation_deleted": {
       const wasViewing = state.currentConversationId === data.conversation_id;
-      if (state.lastConvListData) {
-        state.lastConvListData.conversations = state.lastConvListData.conversations.filter(
-          c => c.id !== data.conversation_id
-        );
-        state.lastConvListData.total = Math.max(0, state.lastConvListData.total - 1);
-        renderConvList(state.lastConvListData);
-        if (wasViewing) {
-          send({ type: "new_conversation" });
-        }
+      removeConversation(data.conversation_id);
+      if (wasViewing) {
+        send({ type: "new_conversation" });
       }
       break;
     }

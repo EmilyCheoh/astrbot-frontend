@@ -5,15 +5,33 @@
    ================================================================ */
 
 export const state = {
+  // -- Message / composer state --
   pendingImages: [],
   isProcessing: false,
   batchRendering: false,
   currentMessages: [],
-  currentConversationId: null,
-  isReadonly: false,
   currentConvTitle: "",
-  currentPage: 1,
-  pinnedIds: [],
-  lastConvListData: null,
+  isReadonly: false,
   searchMode: "title",
+
+  // -- Unified conversation store --
+  // Single source of truth: all conversation objects keyed by ID
+  conversationById: new Map(),
+
+  // Ordered ID arrays — render pulls from the Map
+  conversationIds: [],   // IDs for "All conversations" (cursor-loaded)
+  favoriteIds: [],       // IDs for "Favorites" (globally loaded)
+
+  // Active / pending selection
+  currentConversationId: null,    // Confirmed by server (history arrived)
+  pendingConversationId: null,    // Set on click, cleared on history arrival
+  activeAnchorId: null,           // Search result not yet in loaded list
+
+  // Cursor pagination
+  nextCursor: null,
+  hasMore: true,
+  isLoadingMore: false,
+
+  // Pin operation tracking (per-conversation)
+  pendingPinIds: new Set(),
 };

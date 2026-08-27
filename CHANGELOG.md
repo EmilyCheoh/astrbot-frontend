@@ -6,6 +6,8 @@ debugging
 
 * changed icon position + fixed block width
 
+* optimized Favorite and pagination
+
 ---
 
 V9

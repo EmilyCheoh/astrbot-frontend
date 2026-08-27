@@ -201,6 +201,7 @@ class FrontendAdapter(Platform):
         self._active_ws = ws
         await ws.send_json({"type": "auth_ok"})
         await self.conversations.send_history(ws)
+        await self.conversations.send_favorites(ws)
         logger.info("Web frontend client authenticated.")
 
         # -- Authenticated message loop ---------------------------------
@@ -222,9 +223,9 @@ class FrontendAdapter(Platform):
 
                     # --- Conversation management -----------------------
                     elif kind == "list_conversations":
-                        page = data.get("page", 1)
+                        cur = data.get("cursor")
                         limit = data.get("limit", 20)
-                        await self.conversations.send_conversations_list(ws, page=page, limit=limit)
+                        await self.conversations.send_conversations_list(ws, cursor=cur, limit=limit)
 
                     elif kind == "switch_conversation":
                         cid = data.get("conversation_id")

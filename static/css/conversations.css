@@ -404,50 +404,20 @@
 }
 
 
-/* ---- Pagination ---- */
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
+/* ---- Scroll sentinel & loading indicators ---- */
+.conv-sentinel {
+  height: 1px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.conv-loading,
+.conv-end {
   padding: 8px 12px 4px;
-  border-top: 1px solid var(--border-subtle);
-  margin-top: auto;
-}
-
-.pagination:empty {
-  display: none;
-}
-
-.page-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 18px;
-  transition: background 0.12s, color 0.12s;
-}
-
-.page-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.page-btn:disabled {
-  opacity: 0.3;
-  cursor: default;
-}
-
-.page-info {
+  text-align: center;
   font-size: 12px;
   color: var(--text-muted);
-  user-select: none;
+  flex-shrink: 0;
 }
 
 .conv-empty {
@@ -455,4 +425,21 @@
   text-align: center;
   color: var(--text-placeholder);
   font-size: 13px;
+}
+
+/* ---- Section label ---- */
+.conv-section-label {
+  padding: 10px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  user-select: none;
+}
+
+/* ---- Search anchor separator ---- */
+.conv-anchor-sep {
+  height: 1px;
+  margin: 4px 12px;
+  background: var(--border-subtle);
 }
