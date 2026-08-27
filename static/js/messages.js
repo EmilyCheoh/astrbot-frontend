@@ -213,9 +213,17 @@ export function appendBot(segments) {
     wrapper = row.querySelector(".msg-bot");
   }
 
+  // Separate content segments from tool_call segments
+  const contentSegs = [];
+  const toolSegs = [];
+  for (const seg of segments) {
+    if (seg.type === "tool_call") toolSegs.push(seg);
+    else contentSegs.push(seg);
+  }
+
   let plainText = "";
 
-  for (const seg of segments) {
+  for (const seg of contentSegs) {
     appendSegment(wrapper, seg);
     if (seg.type === "text") {
       plainText += seg.data || "";
@@ -223,7 +231,10 @@ export function appendBot(segments) {
   }
 
   if (isIntermediate) {
-    // Thinking / tool call — hold the row, no action bar yet
+    // Thinking / tool call — render tool calls, hold the row
+    for (const seg of toolSegs) {
+      appendSegment(wrapper, seg);
+    }
     pendingBotRow = row;
   } else {
     // Final text arrived — complete the response row
@@ -232,7 +243,17 @@ export function appendBot(segments) {
       { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(plainText, e.currentTarget) },
     ]);
 
-    row.appendChild(actions);
+    if (toolSegs.length > 0) {
+      // Action bar inside wrapper, between text and tool calls
+      wrapper.appendChild(actions);
+      for (const seg of toolSegs) {
+        appendSegment(wrapper, seg);
+      }
+    } else {
+      // No tool calls — action bar on the row as usual
+      row.appendChild(actions);
+    }
+
     pendingBotRow = null;
   }
 

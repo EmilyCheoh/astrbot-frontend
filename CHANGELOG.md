@@ -4,6 +4,8 @@ debugging
 
 * fixed tool call rendering order
 
+* changed icon position + fixed block width
+
 ---
 
 V9
