@@ -68,7 +68,7 @@ function handleMessage(data) {
       break;
     }
 
-    case "history":
+    case "history": {
       state.currentConversationId = data.conversation_id || null;
       state.pendingConversationId = null;
       // Clear search anchor if we navigated away from it
@@ -77,11 +77,29 @@ function handleMessage(data) {
       }
       state.currentMessages = data.messages || [];
       state.isReadonly = data.readonly || false;
+
+      // Derive conversation title: Map entry > first user message > fallback
+      const knownConv = state.conversationById.get(data.conversation_id);
+      if (knownConv && knownConv.preview && knownConv.preview !== "(empty)") {
+        state.currentConvTitle = knownConv.preview;
+      } else {
+        const firstUser = state.currentMessages.find(m => m.role === "user");
+        const raw = firstUser
+          ? (typeof firstUser.content === "string"
+            ? firstUser.content
+            : Array.isArray(firstUser.content)
+              ? (firstUser.content.find(b => b.type === "text") || {}).text || ""
+              : "")
+          : "";
+        state.currentConvTitle = raw.trim().split("\n")[0].slice(0, 80) || "conversation";
+      }
+
       dom.messages.innerHTML = "";
       renderHistory(state.currentMessages);
       setComposerReadonly(state.isReadonly);
       renderSidebar();
       break;
+    }
 
     case "favorites_list":
       setFavorites(data.favorites || []);
