@@ -30,7 +30,7 @@ function updatePinButton() {
   const cid = state.currentConversationId;
   if (!cid) {
     dom.morePinBtn.disabled = true;
-    dom.morePinBtn.innerHTML = ICON_STAR + " Pin";
+    dom.morePinBtn.innerHTML = ICON_STAR + " Star";
     return;
   }
   const conv = state.conversationById.get(cid);
@@ -41,7 +41,7 @@ function updatePinButton() {
     dom.morePinBtn.innerHTML = (isPinned ? ICON_STAR_FILLED : ICON_STAR) + " ...";
     dom.morePinBtn.disabled = true;
   } else {
-    dom.morePinBtn.innerHTML = (isPinned ? ICON_STAR_FILLED : ICON_STAR) + " " + (isPinned ? "Unpin" : "Pin");
+    dom.morePinBtn.innerHTML = (isPinned ? ICON_STAR_FILLED : ICON_STAR) + " " + (isPinned ? "Unstar" : "Star");
     dom.morePinBtn.disabled = false;
   }
 }

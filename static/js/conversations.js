@@ -415,14 +415,15 @@ function toggleConvMenu(anchorEl, conv) {
 
   const menuW = menu.offsetWidth;
   const menuH = menu.offsetHeight;
-  let left = rect.right + 4;
-  let top = rect.top;
+  // Position below the ⋮ button, right edge slightly past sidebar
+  let left = rect.right - menuW + 12;
+  let top = rect.bottom + 4;
 
   // Keep within viewport
-  if (left + menuW > window.innerWidth - 4) left = rect.left - menuW - 4;
   if (left < 4) left = 4;
+  if (left + menuW > window.innerWidth - 4) left = window.innerWidth - menuW - 4;
   if (top + menuH > window.innerHeight - 4) {
-    top = window.innerHeight - menuH - 4;
+    top = rect.top - menuH - 4;
   }
   if (top < 4) top = 4;
 
