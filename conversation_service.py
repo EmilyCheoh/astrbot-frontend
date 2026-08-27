@@ -177,62 +177,99 @@ class ConversationService:
 
     # -- History loading -------------------------------------------------------
 
+    def _load_conversation_history(
+        self,
+        conversation_id: str,
+        platform_filter: str | tuple[str, ...],
+    ) -> tuple[list, str] | None:
+        """Load and parse a single conversation's history from the DB.
+
+        Returns ``(messages, platform_id)`` when the row exists (messages
+        may be ``[]`` for a newly created conversation with no content yet).
+        Returns ``None`` when no matching row is found.
+        Raises on DB access or JSON parse errors.
+        """
+        db_path = self.find_db()
+        if not db_path:
+            raise FileNotFoundError("Chat history DB not found")
+
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        try:
+            if isinstance(platform_filter, str):
+                cursor = conn.execute(
+                    "SELECT content, platform_id FROM conversations "
+                    "WHERE conversation_id = ? AND platform_id = ?",
+                    (conversation_id, platform_filter),
+                )
+            else:
+                placeholders = ",".join("?" * len(platform_filter))
+                cursor = conn.execute(
+                    f"SELECT content, platform_id FROM conversations "
+                    f"WHERE conversation_id = ? AND platform_id IN ({placeholders})",
+                    (conversation_id, *platform_filter),
+                )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
+
+        if row is None:
+            return None
+
+        content, pid = row
+        messages = json.loads(content) if content else []
+        return (messages, pid)
+
     async def send_history(
         self, ws: web.WebSocketResponse, conversation_id: str | None = None,
-    ) -> bool:
-        """Load conversation history from the DB and send to client.
+    ):
+        """Load conversation history and send to client (auth flow only).
 
         If *conversation_id* is given, load that specific conversation.
         Otherwise fall back to the most recently updated one.
-
-        Returns True on success, False on failure.
         """
         try:
-            db_path = self.find_db()
-            if not db_path:
-                logger.warning("Chat history DB not found, tried common paths")
-                return False
-
             platform_id = self._config.get("id", "abyss_web")
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
 
             if conversation_id:
-                cursor = conn.execute(
-                    "SELECT content, conversation_id FROM conversations "
-                    "WHERE conversation_id = ? AND platform_id = ?",
-                    (conversation_id, platform_id),
+                result = self._load_conversation_history(
+                    conversation_id, platform_id,
                 )
+                if result is not None:
+                    messages, _ = result
+                    cid = conversation_id
+                else:
+                    messages, cid = [], conversation_id
             else:
-                cursor = conn.execute(
-                    "SELECT content, conversation_id FROM conversations "
-                    "WHERE platform_id = ? ORDER BY updated_at DESC LIMIT 1",
-                    (platform_id,),
-                )
+                db_path = self.find_db()
+                if not db_path:
+                    logger.warning("Chat history DB not found, tried common paths")
+                    return
+                conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+                try:
+                    cursor = conn.execute(
+                        "SELECT content, conversation_id FROM conversations "
+                        "WHERE platform_id = ? ORDER BY updated_at DESC LIMIT 1",
+                        (platform_id,),
+                    )
+                    row = cursor.fetchone()
+                finally:
+                    conn.close()
+                if row and row[0]:
+                    messages = json.loads(row[0])
+                    cid = row[1]
+                else:
+                    messages = []
+                    cid = row[1] if row else None
 
-            row = cursor.fetchone()
-            conn.close()
-
-            if row and row[0]:
-                messages = json.loads(row[0])
-                await ws.send_json({
-                    "type": "history",
-                    "messages": messages,
-                    "readonly": False,
-                    "platform_id": platform_id,
-                    "conversation_id": row[1],
-                })
-            else:
-                await ws.send_json({
-                    "type": "history",
-                    "messages": [],
-                    "readonly": False,
-                    "platform_id": platform_id,
-                    "conversation_id": conversation_id,
-                })
-            return True
+            await ws.send_json({
+                "type": "history",
+                "messages": messages,
+                "readonly": False,
+                "platform_id": platform_id,
+                "conversation_id": cid,
+            })
         except Exception as exc:
             logger.warning(f"Failed to load chat history: {exc}")
-            return False
 
     # -- Favorites -------------------------------------------------------------
 
@@ -371,17 +408,31 @@ class ConversationService:
                 await self._send_navigation_failed(ws, conversation_id)
                 return
 
+            # Load and validate history BEFORE switching the pointer.
+            # If this fails the server pointer stays unchanged.
+            platform_id = self._config.get("id", "abyss_web")
+            result = self._load_conversation_history(conversation_id, platform_id)
+            if result is None:
+                await self._send_navigation_failed(ws, conversation_id)
+                return
+
+            messages, pid = result
+
+            # History validated — safe to switch pointer now
             await runtime.conversation_manager.switch_conversation(
                 self._umo, conversation_id,
             )
-            ok = await self.send_history(ws, conversation_id)
-            if ok:
-                await ws.send_json({
-                    "type": "conversation_switched",
-                    "conversation_id": conversation_id,
-                })
-            else:
-                await self._send_navigation_failed(ws, conversation_id)
+            await ws.send_json({
+                "type": "history",
+                "messages": messages,
+                "readonly": False,
+                "platform_id": pid,
+                "conversation_id": conversation_id,
+            })
+            await ws.send_json({
+                "type": "conversation_switched",
+                "conversation_id": conversation_id,
+            })
         except Exception as exc:
             logger.warning(f"Failed to switch conversation: {exc}")
             await self._send_navigation_failed(ws, conversation_id)
@@ -516,34 +567,22 @@ class ConversationService:
     async def handle_view_history(self, ws: web.WebSocketResponse, conversation_id: str):
         """Load a conversation's history without switching the active pointer."""
         try:
-            db_path = self.find_db()
-            if not db_path:
+            result = self._load_conversation_history(
+                conversation_id, ("Abyss", "Abyss_Den"),
+            )
+            if result is None:
                 await self._send_navigation_failed(ws, conversation_id)
                 return
 
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-            cursor = conn.execute(
-                "SELECT content, platform_id FROM conversations "
-                "WHERE conversation_id = ? AND platform_id IN ('Abyss', 'Abyss_Den')",
-                (conversation_id,),
-            )
-            row = cursor.fetchone()
-            conn.close()
-
-            if row and row[0]:
-                messages = json.loads(row[0])
-                pid = row[1]
-                den_pid = self._config.get("id", "abyss_web")
-                await ws.send_json({
-                    "type": "history",
-                    "messages": messages,
-                    "readonly": pid != den_pid,
-                    "platform_id": pid,
-                    "conversation_id": conversation_id,
-                })
-            else:
-                # Row missing or empty — treat as navigation failure
-                await self._send_navigation_failed(ws, conversation_id)
+            messages, pid = result
+            den_pid = self._config.get("id", "abyss_web")
+            await ws.send_json({
+                "type": "history",
+                "messages": messages,
+                "readonly": pid != den_pid,
+                "platform_id": pid,
+                "conversation_id": conversation_id,
+            })
         except Exception as exc:
             logger.warning(f"Failed to view history: {exc}")
             await self._send_navigation_failed(ws, conversation_id)
