@@ -1,3 +1,7 @@
+支持edit last message
+
+---
+
 支持发送文件
 
 ---

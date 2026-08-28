@@ -154,6 +154,166 @@ class MessageService:
             {"content": content, "id": str(uuid.uuid4())}, ws,
         )
 
+    # -- Edit assistant reply (no LLM re-fire) --------------------------------
+
+    @staticmethod
+    def _extract_assistant_text(message: dict) -> str:
+        """Extract visible text from an assistant message."""
+        content = message.get("content", "")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "".join(
+                block.get("text", "")
+                for block in content
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+        return ""
+
+    async def handle_edit_assistant_message(
+        self,
+        ws: web.WebSocketResponse,
+        conversation_id: str,
+        new_text: str,
+        original_content: str,
+    ):
+        """Replace the visible text of the last assistant reply in history.
+
+        Does NOT trigger a new LLM response — purely a manual correction.
+        """
+        new_text = new_text.strip()
+        if not new_text:
+            await self._send_edit_failed(ws, conversation_id)
+            return
+
+        try:
+            if not runtime.conversation_manager:
+                logger.warning("Conversation manager not available for assistant edit")
+                await self._send_edit_failed(ws, conversation_id)
+                return
+
+            # Verify conversation ID matches the active one
+            cid = await runtime.conversation_manager.get_curr_conversation_id(
+                self._umo
+            )
+            if not cid or cid != conversation_id:
+                logger.warning("Assistant edit: conversation ID mismatch")
+                await self._send_edit_failed(ws, conversation_id)
+                return
+
+            # Load history (read-only SQLite, same pattern as _truncate)
+            db_path = self._conversations.find_db()
+            if not db_path:
+                await self._send_edit_failed(ws, conversation_id)
+                return
+
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            cursor = conn.execute(
+                "SELECT content FROM conversations WHERE conversation_id = ?",
+                (cid,),
+            )
+            row = cursor.fetchone()
+            conn.close()
+
+            if not row or not row[0]:
+                await self._send_edit_failed(ws, conversation_id)
+                return
+
+            history = json.loads(row[0])
+
+            # Find last user message index
+            last_user_idx = None
+            for i in range(len(history) - 1, -1, -1):
+                if history[i].get("role") == "user":
+                    last_user_idx = i
+                    break
+
+            if last_user_idx is None:
+                await self._send_edit_failed(ws, conversation_id)
+                return
+
+            # Find last assistant with visible text AFTER last user message
+            target_idx = None
+            for i in range(len(history) - 1, last_user_idx, -1):
+                msg = history[i]
+                if msg.get("role") != "assistant":
+                    continue
+                visible = self._extract_assistant_text(msg)
+                if visible.strip():
+                    target_idx = i
+                    break
+
+            if target_idx is None:
+                await self._send_edit_failed(ws, conversation_id)
+                return
+
+            # Verify original content matches what's in the DB
+            stored_text = self._extract_assistant_text(history[target_idx])
+            if stored_text.strip() != original_content.strip():
+                logger.warning(
+                    "Assistant edit: original content mismatch "
+                    "(screen vs DB out of sync)"
+                )
+                await self._send_edit_failed(ws, conversation_id)
+                return
+
+            # Replace text content, preserving think blocks and tool records
+            target = history[target_idx]
+            target_content = target.get("content")
+
+            if isinstance(target_content, str):
+                target["content"] = new_text
+            elif isinstance(target_content, list):
+                updated_blocks = []
+                text_replaced = False
+                for block in target_content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        if not text_replaced:
+                            updated_block = dict(block)
+                            updated_block["text"] = new_text
+                            updated_blocks.append(updated_block)
+                            text_replaced = True
+                    else:
+                        updated_blocks.append(block)
+
+                if not text_replaced:
+                    await self._send_edit_failed(ws, conversation_id)
+                    return
+
+                target["content"] = updated_blocks
+            else:
+                await self._send_edit_failed(ws, conversation_id)
+                return
+
+            # Save via conversation_manager
+            await runtime.conversation_manager.update_conversation(
+                self._umo, cid, history=history,
+            )
+
+            logger.info(f"Assistant reply edited in conversation {cid}")
+
+            await ws.send_json({
+                "type": "assistant_message_edited",
+                "conversation_id": conversation_id,
+                "message_index": target_idx,
+                "message": history[target_idx],
+            })
+
+        except Exception as exc:
+            logger.warning(f"Failed to edit assistant message: {exc}")
+            await self._send_edit_failed(ws, conversation_id)
+
+    @staticmethod
+    async def _send_edit_failed(ws: web.WebSocketResponse, conversation_id: str):
+        """Send an edit-failed response."""
+        try:
+            await ws.send_json({
+                "type": "assistant_message_edit_failed",
+                "conversation_id": conversation_id,
+            })
+        except Exception:
+            pass
+
     async def _truncate_last_exchange(self, expected_content: str = "", *, action: str = "retry") -> bool:
         """Remove the last user+assistant exchange from conversation history.
 

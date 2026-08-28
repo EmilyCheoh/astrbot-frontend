@@ -247,8 +247,15 @@
 }
 
 .msg-row-user.is-last .msg-action-btn.edit-btn,
+.msg-row-bot.is-last .msg-action-btn.edit-btn,
 .msg-row-bot.is-last .msg-action-btn.retry-btn {
   display: flex;
+}
+
+/* ---- Bot edit area (left-aligned) ---- */
+.bot-edit-area {
+  margin-left: 0;
+  margin-right: auto;
 }
 
 /* ---- Inline edit area ---- */

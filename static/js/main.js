@@ -12,6 +12,7 @@ import { cycleTheme, cycleFont } from "./preferences.js";
 import {
   appendBot, renderHistory, scrollToBottom,
   setComposerReadonly, updateLastActions, initScrollButton,
+  handleAssistantEditSuccess, handleAssistantEditFailure,
 } from "./messages.js";
 import { sendMessage, initComposer, updateComposerAvailability } from "./composer.js";
 import {
@@ -182,6 +183,14 @@ function handleMessage(data) {
       updateConversation(data.conversation_id, { preview: newTitle });
       break;
     }
+
+    case "assistant_message_edited":
+      handleAssistantEditSuccess(data);
+      break;
+
+    case "assistant_message_edit_failed":
+      handleAssistantEditFailure();
+      break;
 
     case "conversation_deleted": {
       const wasViewing = state.currentConversationId === data.conversation_id;

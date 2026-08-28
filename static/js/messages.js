@@ -163,6 +163,7 @@ function appendSegment(wrapper, seg) {
   switch (seg.type) {
     case "text": {
       const content = document.createElement("div");
+      content.className = "msg-bot-text";
       content.innerHTML = renderMarkdown(seg.data);
       wrapper.appendChild(content);
       break;
@@ -275,6 +276,8 @@ export function appendBot(segments) {
     pendingBotRow = row;
   } else {
     // Final text arrived — complete the response row
+    row.dataset.text = plainText;
+
     // Hide Retry if the preceding user message carried attachments
     const userRows = dom.messages.querySelectorAll(".msg-row-user");
     const lastUserRow = userRows.length > 0 ? userRows[userRows.length - 1] : null;
@@ -283,7 +286,8 @@ export function appendBot(segments) {
       ...(!userHasAttachment
         ? [{ icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" }]
         : []),
-      { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(plainText, e.currentTarget) },
+      { icon: ICON_EDIT, title: "Edit", onClick: () => handleAssistantEditClick(row), className: "edit-btn" },
+      { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(row.dataset.text || "", e.currentTarget) },
     ];
     const actions = createActionBar(botActions);
 
@@ -515,6 +519,164 @@ function handleEditClick(userRow) {
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
     textarea.focus();
   });
+}
+
+// ---- Assistant edit (no LLM re-fire) ----
+
+let pendingAssistantEdit = null;
+
+function handleAssistantEditClick(botRow) {
+  if (state.isProcessing || state.isReadonly || !botRow.classList.contains("is-last")) return;
+  if (botRow.querySelector(".bot-edit-area")) return;
+
+  const wrapper = botRow.querySelector(".msg-bot");
+  const textBlocks = wrapper.querySelectorAll(".msg-bot-text");
+  const actionsBar = botRow.querySelector(".msg-actions") || wrapper.querySelector(".msg-actions");
+  const originalText = botRow.dataset.text || "";
+
+  // Hide text blocks and action bar
+  textBlocks.forEach((block) => block.classList.add("hidden"));
+  if (actionsBar) actionsBar.classList.add("hidden");
+
+  const editArea = document.createElement("div");
+  editArea.className = "edit-area bot-edit-area";
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "edit-textarea";
+  textarea.value = originalText;
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "edit-btns";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "edit-cancel-btn";
+  cancelBtn.textContent = "Cancel";
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.className = "edit-send-btn";
+  confirmBtn.textContent = "Confirm";
+  confirmBtn.disabled = !originalText.trim();
+
+  function closeBotEdit() {
+    editArea.remove();
+    textBlocks.forEach((block) => block.classList.remove("hidden"));
+    if (actionsBar) actionsBar.classList.remove("hidden");
+    pendingAssistantEdit = null;
+  }
+
+  function updateConfirmAvailability() {
+    confirmBtn.disabled = !textarea.value.trim();
+  }
+
+  cancelBtn.addEventListener("click", closeBotEdit);
+
+  confirmBtn.addEventListener("click", () => {
+    const newText = textarea.value.trim();
+    if (!newText || !isConnected()) return;
+
+    // Keep edit area visible until backend confirms
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    pendingAssistantEdit = { botRow, editArea, textBlocks, actionsBar };
+
+    send({
+      type: "edit_assistant_message",
+      conversation_id: state.currentConversationId,
+      original_content: originalText,
+      content: newText,
+    });
+  });
+
+  textarea.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeBotEdit();
+    }
+  });
+
+  textarea.addEventListener("input", () => {
+    updateConfirmAvailability();
+    textarea.style.height = "auto";
+    textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
+  });
+
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(confirmBtn);
+  editArea.appendChild(textarea);
+  editArea.appendChild(btnRow);
+
+  // Insert edit area after the last text block (before tool calls if any)
+  const lastTextBlock = textBlocks.length > 0 ? textBlocks[textBlocks.length - 1] : null;
+  if (lastTextBlock && lastTextBlock.nextSibling) {
+    wrapper.insertBefore(editArea, lastTextBlock.nextSibling);
+  } else {
+    wrapper.appendChild(editArea);
+  }
+
+  requestAnimationFrame(() => {
+    textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
+    textarea.focus();
+  });
+}
+
+export function handleAssistantEditSuccess(data) {
+  const edit = pendingAssistantEdit;
+  if (!edit) return;
+
+  const { botRow, editArea, textBlocks, actionsBar } = edit;
+
+  // Extract visible text from the authoritative backend message
+  const msg = data.message || {};
+  let editedText = "";
+  if (typeof msg.content === "string") {
+    editedText = msg.content;
+  } else if (Array.isArray(msg.content)) {
+    editedText = msg.content
+      .filter((b) => b && b.type === "text")
+      .map((b) => b.text || "")
+      .join("");
+  }
+
+  // Remove old text blocks
+  textBlocks.forEach((block) => block.remove());
+
+  // Render new text through markdown + DOMPurify
+  const newContent = document.createElement("div");
+  newContent.className = "msg-bot-text";
+  newContent.innerHTML = renderMarkdown(editedText);
+
+  // Insert where the edit area is, then remove edit area
+  editArea.parentNode.insertBefore(newContent, editArea);
+  editArea.remove();
+
+  // Update stored text
+  botRow.dataset.text = editedText;
+
+  // Update in-memory history
+  if (data.message_index != null && state.currentMessages[data.message_index]) {
+    state.currentMessages[data.message_index] = data.message;
+  }
+
+  // Restore action bar
+  if (actionsBar) actionsBar.classList.remove("hidden");
+
+  pendingAssistantEdit = null;
+}
+
+export function handleAssistantEditFailure() {
+  const edit = pendingAssistantEdit;
+  if (!edit) {
+    return;
+  }
+
+  // Re-enable buttons so the user can try again or cancel
+  const confirmBtn = edit.editArea.querySelector(".edit-send-btn");
+  const cancelBtn = edit.editArea.querySelector(".edit-cancel-btn");
+  if (confirmBtn) confirmBtn.disabled = false;
+  if (cancelBtn) cancelBtn.disabled = false;
+
+  pendingAssistantEdit = null;
 }
 
 // ---- Scroll-to-bottom button ----

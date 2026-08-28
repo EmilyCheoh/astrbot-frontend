@@ -281,6 +281,15 @@ class FrontendAdapter(Platform):
                             ws, data.get("content", ""), action="edit",
                         )
 
+                    elif kind == "edit_assistant_message":
+                        cid = data.get("conversation_id")
+                        content = data.get("content", "").strip()
+                        original = data.get("original_content", "")
+                        if cid and content:
+                            await self.messages.handle_edit_assistant_message(
+                                ws, cid, content, original,
+                            )
+
                     # --- Heartbeat -------------------------------------
                     elif kind == "ping":
                         await ws.send_json({"type": "pong"})
