@@ -286,7 +286,9 @@ export function appendBot(segments) {
       ...(!userHasAttachment
         ? [{ icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" }]
         : []),
-      { icon: ICON_EDIT, title: "Edit", onClick: () => handleAssistantEditClick(row), className: "edit-btn" },
+      ...(plainText
+        ? [{ icon: ICON_EDIT, title: "Edit", onClick: () => handleAssistantEditClick(row), className: "edit-btn" }]
+        : []),
       { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(row.dataset.text || "", e.currentTarget) },
     ];
     const actions = createActionBar(botActions);
@@ -558,6 +560,11 @@ function handleAssistantEditClick(botRow) {
   confirmBtn.disabled = !originalText.trim();
 
   function closeBotEdit() {
+    // Block ESC/Cancel while waiting for backend save
+    if (pendingAssistantEdit?.editArea === editArea) {
+      return;
+    }
+
     editArea.remove();
     textBlocks.forEach((block) => block.classList.remove("hidden"));
     if (actionsBar) actionsBar.classList.remove("hidden");

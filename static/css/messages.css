@@ -252,8 +252,8 @@
   display: flex;
 }
 
-/* ---- Bot edit area (left-aligned) ---- */
-.bot-edit-area {
+/* ---- Bot edit area (left-aligned, higher specificity) ---- */
+.edit-area.bot-edit-area {
   margin-left: 0;
   margin-right: auto;
 }
