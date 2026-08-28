@@ -120,6 +120,73 @@
   justify-content: center;
 }
 
+/* ---- File preview chips ---- */
+.file-preview-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  max-width: 220px;
+}
+
+.file-preview-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.file-preview-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.file-preview-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-preview-size {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.file-preview-remove {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* ---- Composer warning ---- */
+.composer-warning {
+  font-size: 12px;
+  color: var(--text-danger, #e74c3c);
+  padding: 2px 4px;
+  animation: warning-fade 4s ease-out forwards;
+}
+
+@keyframes warning-fade {
+  0%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .send-btn {
   width: 32px;
   height: 32px;

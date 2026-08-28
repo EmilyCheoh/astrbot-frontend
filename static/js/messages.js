@@ -97,21 +97,56 @@ export function updateLastActions() {
 
 // ---- Append user message ----
 
-export function appendUser(text) {
+export function appendUser(text, { images = [], files = [], hasAttachment = false } = {}) {
   pendingBotRow = null;  // New user turn — reset accumulator
 
   const wrapper = document.createElement("div");
   wrapper.className = "msg-row msg-row-user";
   wrapper.dataset.text = text;
+  if (hasAttachment) wrapper.dataset.hasAttachment = "true";
 
   const div = document.createElement("div");
   div.className = "msg-user";
-  div.textContent = text;
 
-  const actions = createActionBar([
-    { icon: ICON_EDIT, title: "Edit", onClick: () => handleEditClick(wrapper), className: "edit-btn" },
-    { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(text, e.currentTarget) },
-  ]);
+  // Text content
+  if (text && text !== "[image]" && text !== "[file]") {
+    const textNode = document.createElement("span");
+    textNode.textContent = text;
+    div.appendChild(textNode);
+  }
+
+  // Image thumbnails in bubble
+  if (images.length > 0) {
+    const strip = document.createElement("div");
+    strip.className = "msg-attachment-images";
+    for (const img of images) {
+      const imgEl = document.createElement("img");
+      imgEl.src = img.dataUri || img;
+      strip.appendChild(imgEl);
+    }
+    div.appendChild(strip);
+  }
+
+  // File chips in bubble
+  if (files.length > 0) {
+    const strip = document.createElement("div");
+    strip.className = "msg-attachment-files";
+    for (const f of files) {
+      const chip = document.createElement("span");
+      chip.className = "msg-file-chip";
+      chip.textContent = f.name || "file";
+      strip.appendChild(chip);
+    }
+    div.appendChild(strip);
+  }
+
+  // Action bar — skip Edit for attachment messages
+  const actionList = [];
+  if (!hasAttachment) {
+    actionList.push({ icon: ICON_EDIT, title: "Edit", onClick: () => handleEditClick(wrapper), className: "edit-btn" });
+  }
+  actionList.push({ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(text, e.currentTarget) });
+  const actions = createActionBar(actionList);
 
   wrapper.appendChild(div);
   wrapper.appendChild(actions);
@@ -375,6 +410,7 @@ function handleRetry(botRow) {
 
   const lastUser = dom.messages.querySelector(".msg-row-user.is-last");
   if (!lastUser) return;
+  if (lastUser.dataset.hasAttachment) return; // Cannot retry attachment messages
   const userText = lastUser.dataset.text;
   if (!userText) return;
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aiohttp import web
@@ -20,11 +21,11 @@ from astrbot.api.platform import (
     MessageMember,
     MessageType,
 )
-from astrbot.api.message_components import Plain, Image
+from astrbot.api.message_components import File, Plain, Image
 from astrbot import logger
 
 from .frontend_event import FrontendEvent
-from .media_utils import save_temp_media
+from .media_utils import save_temp_media, save_temp_file
 from . import runtime
 
 if TYPE_CHECKING:
@@ -61,15 +62,48 @@ class MessageService:
             chain.append(Plain(text=content))
 
         temp_files: list[str] = []
+        save_failed = False
+
+        # Images
         for img in data.get("images", []):
             path = save_temp_media(img, "image")
             if path:
                 chain.append(Image.fromFileSystem(path))
                 temp_files.append(path)
-                if not content:
-                    content = "[图片]"
+            else:
+                save_failed = True
+                break
+
+        # Files (non-image attachments)
+        if not save_failed:
+            for file_obj in data.get("files", []):
+                file_data = file_obj.get("data", "")
+                file_name = file_obj.get("name", "attachment.bin")
+                path = save_temp_file(file_data, file_name)
+                if path:
+                    chain.append(File(name=file_name, file=path))
+                    temp_files.append(path)
+                else:
+                    save_failed = True
+                    break
+
+        # If any attachment failed, clean up all temp files and abort
+        if save_failed:
+            for fp in temp_files:
+                try:
+                    Path(fp).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            await ws.send_json({
+                "type": "error",
+                "id": msg_id,
+                "message": "Failed to save attached file",
+            })
+            await ws.send_json({"type": "status", "status": "idle"})
+            return
 
         if not chain:
+            await ws.send_json({"type": "status", "status": "idle"})
             return
 
         # ---- Build AstrBotMessage ------------------------------------------

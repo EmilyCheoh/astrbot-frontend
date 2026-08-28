@@ -143,3 +143,27 @@ def save_temp_media(data_uri: str, media_type: str) -> str | None:
     except Exception as exc:
         logger.warning(f"Failed to save temp media: {exc}")
         return None
+
+
+def save_temp_file(data_uri: str, original_name: str) -> str | None:
+    """Decode a data-URI and write it to a temp file, preserving the original extension."""
+    try:
+        if data_uri.startswith("data:"):
+            _, encoded = data_uri.split(",", 1)
+        else:
+            encoded = data_uri
+
+        # Preserve original extension — more reliable than MIME for code files
+        _, ext = os.path.splitext(original_name)
+        if not ext:
+            ext = ".bin"
+
+        raw = base64.b64decode(encoded)
+        tmp_dir = Path("/tmp/abyss_frontend")
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_path = tmp_dir / f"{uuid.uuid4()}{ext}"
+        tmp_path.write_bytes(raw)
+        return str(tmp_path)
+    except Exception as exc:
+        logger.warning(f"Failed to save temp file '{original_name}': {exc}")
+        return None

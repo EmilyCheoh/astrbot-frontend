@@ -6,7 +6,10 @@
 
 export const state = {
   // -- Message / composer state --
-  pendingImages: [],
+  pendingImages: [],       // { dataUri, size }
+  pendingFiles: [],        // { name, size, dataUri }
+  pendingReads: 0,         // In-flight FileReader count
+  pendingAttachmentBytes: 0,  // Reserved budget (images + files)
   isProcessing: false,
   batchRendering: false,
   currentMessages: [],
