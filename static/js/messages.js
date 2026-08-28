@@ -6,7 +6,6 @@
 import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { send, isConnected } from "./socket.js";
-import { updateComposerAvailability } from "./composer.js";
 
 // ---- Markdown rendering ----
 
@@ -571,6 +570,5 @@ export function setComposerReadonly(readonly) {
     dom.attachBtn.disabled = false;
     if (composer) composer.classList.remove("composer-readonly");
     if (existing) existing.remove();
-    updateComposerAvailability();
   }
 }

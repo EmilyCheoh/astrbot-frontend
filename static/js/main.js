@@ -100,6 +100,7 @@ function handleMessage(data) {
       dom.messages.innerHTML = "";
       renderHistory(state.currentMessages);
       setComposerReadonly(state.isReadonly);
+      updateComposerAvailability();
       renderSidebar();
       break;
     }
@@ -149,6 +150,7 @@ function handleMessage(data) {
       state.isReadonly = false;
       dom.messages.innerHTML = "";
       setComposerReadonly(false);
+      updateComposerAvailability();
       closePanel();
       break;
 
