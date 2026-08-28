@@ -1,3 +1,7 @@
+optimized search function + search by CoT
+
+---
+
 time conversion
 
 ---

@@ -17,7 +17,7 @@ export function openSearch() {
   dom.searchOverlay.classList.remove("hidden");
   dom.searchInput.value = "";
   dom.searchResults.innerHTML = "";
-  setSearchMode("title");
+  setSearchMode("content");
   requestAnimationFrame(() => dom.searchInput.focus());
 }
 
@@ -41,7 +41,13 @@ function setSearchMode(mode) {
   } else {
     dom.searchInputRow.classList.remove("hidden");
     dom.searchDateInputs.classList.add("hidden");
-    dom.searchInput.placeholder = mode === "title" ? "Search titles..." : "Search content...";
+
+    const placeholders = {
+      content: "Search content...",
+      cot: "Search CoT...",
+      title: "Search titles...",
+    };
+    dom.searchInput.placeholder = placeholders[mode] || "Search content...";
     dom.searchInput.focus();
   }
 
@@ -79,6 +85,47 @@ function doSearch() {
   });
 }
 
+// ---- Navigation handler ----
+
+function openSearchResult(r) {
+  state.currentConvTitle = r.preview || "conversation";
+  state.conversationById.set(r.id, r);
+  state.pendingConversationId = r.id;
+  state.activeAnchorId = r.id;
+
+  closeSearch();
+
+  if (!isConnected()) return;
+
+  if (r.platform_id === "Abyss") {
+    send({ type: "view_history", conversation_id: r.id });
+  } else {
+    send({ type: "switch_conversation", conversation_id: r.id });
+  }
+}
+
+// ---- Match element builder ----
+
+function createMatchButton(result, match) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "search-result-match";
+
+  button.appendChild(document.createTextNode(match.before || ""));
+
+  const mark = document.createElement("mark");
+  mark.textContent = match.match || "";
+  button.appendChild(mark);
+
+  button.appendChild(document.createTextNode(match.after || ""));
+
+  button.addEventListener("click", () => {
+    openSearchResult(result);
+  });
+
+  return button;
+}
+
 // ---- Render results ----
 
 export function renderSearchResults(results) {
@@ -90,8 +137,16 @@ export function renderSearchResults(results) {
   }
 
   for (const r of results) {
-    const item = document.createElement("button");
+    const item = document.createElement("div");
     item.className = "search-result-item";
+
+    // -- Clickable heading --
+    const heading = document.createElement("button");
+    heading.type = "button";
+    heading.className = "search-result-heading";
+    heading.addEventListener("click", () => {
+      openSearchResult(r);
+    });
 
     const topRow = document.createElement("div");
     topRow.className = "search-result-top";
@@ -108,40 +163,54 @@ export function renderSearchResults(results) {
       topRow.appendChild(tag);
     }
 
-    item.appendChild(topRow);
+    heading.appendChild(topRow);
+    item.appendChild(heading);
 
-    if (r.snippet) {
-      const snippet = document.createElement("div");
-      snippet.className = "search-result-snippet";
-      snippet.textContent = r.snippet;
-      item.appendChild(snippet);
+    // -- Match list --
+    const matches = Array.isArray(r.matches) ? r.matches : [];
+
+    if (matches.length > 0) {
+      const matchList = document.createElement("div");
+      matchList.className = "search-result-matches";
+
+      const matchButtons = matches.map((match, index) => {
+        const button = createMatchButton(r, match);
+        button.hidden = index >= 3;
+        matchList.appendChild(button);
+        return button;
+      });
+
+      item.appendChild(matchList);
+
+      if (matches.length > 3) {
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "search-result-toggle";
+        toggle.textContent = `Show all ${matches.length} matches`;
+
+        let expanded = false;
+
+        toggle.addEventListener("click", () => {
+          expanded = !expanded;
+
+          matchButtons.forEach((button, index) => {
+            button.hidden = !expanded && index >= 3;
+          });
+
+          toggle.textContent = expanded
+            ? "Show less"
+            : `Show all ${matches.length} matches`;
+        });
+
+        item.appendChild(toggle);
+      }
     }
 
+    // -- Timestamp --
     const time = document.createElement("div");
     time.className = "search-result-time";
     time.textContent = formatTime(r.updated_at);
     item.appendChild(time);
-
-    item.addEventListener("click", () => {
-      state.currentConvTitle = r.preview || "conversation";
-
-      // Store the full result object in the Map for anchor rendering
-      state.conversationById.set(r.id, r);
-
-      // Set pending + anchor state
-      state.pendingConversationId = r.id;
-      state.activeAnchorId = r.id;
-
-      closeSearch();
-
-      if (!isConnected()) return;
-
-      if (r.platform_id === "Abyss") {
-        send({ type: "view_history", conversation_id: r.id });
-      } else {
-        send({ type: "switch_conversation", conversation_id: r.id });
-      }
-    });
 
     dom.searchResults.appendChild(item);
   }
