@@ -107,6 +107,28 @@ export function initComposer() {
     }
   });
 
+  // Keyboard behavior:
+  // Desktop: Enter sends, Shift+Enter inserts a newline
+  // Mobile: Enter always inserts a newline (send via button only)
+  dom.msgInput.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+
+    // Do not send while confirming text in an IME
+    if (e.isComposing || e.keyCode === 229) return;
+
+    const isMobile =
+      navigator.userAgentData?.mobile === true ||
+      /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+    // Mobile Enter and desktop Shift+Enter keep the textarea's
+    // normal newline behavior.
+    if (isMobile || e.shiftKey) return;
+
+    e.preventDefault();
+    sendMessage();
+  });
+
   // Send button
   dom.sendBtn.addEventListener("click", sendMessage);
 }
