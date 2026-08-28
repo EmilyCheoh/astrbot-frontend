@@ -581,6 +581,9 @@ function handleAssistantEditClick(botRow) {
     const newText = textarea.value.trim();
     if (!newText || !isConnected()) return;
 
+    // Clear previous error if retrying
+    editArea.querySelector(".bot-edit-error")?.remove();
+
     // Keep edit area visible until backend confirms
     confirmBtn.disabled = true;
     cancelBtn.disabled = true;
@@ -673,15 +676,23 @@ export function handleAssistantEditSuccess(data) {
 
 export function handleAssistantEditFailure() {
   const edit = pendingAssistantEdit;
-  if (!edit) {
-    return;
-  }
+  if (!edit) return;
 
   // Re-enable buttons so the user can try again or cancel
   const confirmBtn = edit.editArea.querySelector(".edit-send-btn");
   const cancelBtn = edit.editArea.querySelector(".edit-cancel-btn");
   if (confirmBtn) confirmBtn.disabled = false;
   if (cancelBtn) cancelBtn.disabled = false;
+
+  // Show inline error hint
+  let errorText = edit.editArea.querySelector(".bot-edit-error");
+  if (!errorText) {
+    errorText = document.createElement("div");
+    errorText.className = "bot-edit-error";
+    errorText.textContent = "Couldn't save the edit.";
+    const btnRow = edit.editArea.querySelector(".edit-btns");
+    edit.editArea.insertBefore(errorText, btnRow);
+  }
 
   pendingAssistantEdit = null;
 }

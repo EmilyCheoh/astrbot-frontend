@@ -258,6 +258,13 @@
   margin-right: auto;
 }
 
+.bot-edit-error {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-supporting);
+}
+
 /* ---- Inline edit area ---- */
 .edit-area {
   width: 80%;
