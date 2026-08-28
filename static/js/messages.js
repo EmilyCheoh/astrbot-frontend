@@ -472,6 +472,22 @@ function handleEditClick(userRow) {
   });
 }
 
+// ---- Scroll-to-bottom button ----
+
+export function initScrollButton() {
+  const THRESHOLD = 200;
+
+  dom.chatScroll.addEventListener("scroll", () => {
+    const distFromBottom =
+      dom.chatScroll.scrollHeight - dom.chatScroll.scrollTop - dom.chatScroll.clientHeight;
+    dom.scrollBottomBtn.classList.toggle("visible", distFromBottom > THRESHOLD);
+  }, { passive: true });
+
+  dom.scrollBottomBtn.addEventListener("click", () => {
+    dom.chatScroll.scrollTo({ top: dom.chatScroll.scrollHeight, behavior: "smooth" });
+  });
+}
+
 // ---- Read-only mode ----
 
 export function setComposerReadonly(readonly) {

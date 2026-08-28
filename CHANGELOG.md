@@ -1,5 +1,7 @@
 UI improvement
 
++ 拖拽发图 + 回到底部的按钮
+
 ---
 
 debugging

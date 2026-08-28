@@ -107,6 +107,38 @@ export function initComposer() {
     }
   });
 
+  // Drag-and-drop images
+  const composerEl = document.querySelector(".composer");
+  let dragCounter = 0;
+
+  dom.chat.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    if (state.isReadonly) return;
+    dragCounter++;
+    composerEl.classList.add("drag-over");
+  });
+
+  dom.chat.addEventListener("dragleave", () => {
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      composerEl.classList.remove("drag-over");
+    }
+  });
+
+  dom.chat.addEventListener("dragover", (e) => {
+    e.preventDefault();
+  });
+
+  dom.chat.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    composerEl.classList.remove("drag-over");
+    if (state.isReadonly) return;
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) addImages(files);
+  });
+
   // Keyboard behavior:
   // Desktop: Enter sends, Shift+Enter inserts a newline
   // Mobile: Enter always inserts a newline (send via button only)

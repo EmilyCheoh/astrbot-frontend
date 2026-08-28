@@ -24,6 +24,11 @@
   border-color: var(--border-strong);
 }
 
+.composer.drag-over {
+  border-color: var(--border-strong);
+  background: var(--bg-secondary);
+}
+
 .composer-row {
   display: flex;
   align-items: center;

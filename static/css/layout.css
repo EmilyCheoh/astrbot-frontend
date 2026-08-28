@@ -4,6 +4,7 @@
 
 /* ---- Chat layout — 3-row grid: header | scroll | composer ---- */
 .chat-layout {
+  position: relative;
   height: 100dvh;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -83,4 +84,36 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+/* ---- Scroll-to-bottom button ---- */
+.scroll-bottom-btn {
+  position: absolute;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  right: 24px;
+  z-index: 10;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, background 0.15s, color 0.15s;
+}
+
+.scroll-bottom-btn.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.scroll-bottom-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }

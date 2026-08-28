@@ -11,7 +11,7 @@ import { connectWS, send, stopReconnect } from "./socket.js";
 import { cycleTheme, cycleFont } from "./preferences.js";
 import {
   appendBot, renderHistory, scrollToBottom,
-  setComposerReadonly, updateLastActions,
+  setComposerReadonly, updateLastActions, initScrollButton,
 } from "./messages.js";
 import { sendMessage, initComposer } from "./composer.js";
 import {
@@ -217,3 +217,4 @@ initComposer();
 initConversations();
 initSearch();
 initExport();
+initScrollButton();

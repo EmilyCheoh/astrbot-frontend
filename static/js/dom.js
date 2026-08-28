@@ -40,4 +40,5 @@ export const dom = {
   morePinBtn:         document.getElementById("more-pin-btn"),
   exportMdBtn:        document.getElementById("export-md-btn"),
   moreDeleteBtn:      document.getElementById("more-delete-btn"),
+  scrollBottomBtn:    document.getElementById("scroll-bottom-btn"),
 };
