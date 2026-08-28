@@ -21,7 +21,7 @@ const PREVIEWABLE_IMAGE_TYPES = new Set([
 
 // ---- Composer availability ----
 
-function updateComposerAvailability() {
+export function updateComposerAvailability() {
   dom.sendBtn.disabled =
     state.pendingReads > 0 ||
     state.isProcessing ||
@@ -202,7 +202,7 @@ function clearPending() {
 // ---- Send message ----
 
 export function sendMessage() {
-  if (state.isReadonly || state.pendingReads > 0) return;
+  if (state.isReadonly || state.isProcessing || state.pendingReads > 0) return;
   const text = dom.msgInput.value.trim();
   const images = state.pendingImages.slice();
   const files = state.pendingFiles.slice();
@@ -217,10 +217,7 @@ export function sendMessage() {
   const hasAttachment = images.length > 0 || files.length > 0;
 
   send(payload);
-  appendUser(
-    text || (files.length > 0 ? "[file]" : "[image]"),
-    { images, files, hasAttachment },
-  );
+  appendUser(text, { images, files, hasAttachment });
   dom.msgInput.value = "";
   dom.msgInput.style.height = "auto";
   clearPending();

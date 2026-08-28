@@ -6,6 +6,7 @@
 import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { send, isConnected } from "./socket.js";
+import { updateComposerAvailability } from "./composer.js";
 
 // ---- Markdown rendering ----
 
@@ -109,7 +110,7 @@ export function appendUser(text, { images = [], files = [], hasAttachment = fals
   div.className = "msg-user";
 
   // Text content
-  if (text && text !== "[image]" && text !== "[file]") {
+  if (text) {
     const textNode = document.createElement("span");
     textNode.textContent = text;
     div.appendChild(textNode);
@@ -140,12 +141,14 @@ export function appendUser(text, { images = [], files = [], hasAttachment = fals
     div.appendChild(strip);
   }
 
-  // Action bar — skip Edit for attachment messages
+  // Action bar — skip Edit for attachment messages, skip Copy if no text
   const actionList = [];
   if (!hasAttachment) {
     actionList.push({ icon: ICON_EDIT, title: "Edit", onClick: () => handleEditClick(wrapper), className: "edit-btn" });
   }
-  actionList.push({ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(text, e.currentTarget) });
+  if (text) {
+    actionList.push({ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(text, e.currentTarget) });
+  }
   const actions = createActionBar(actionList);
 
   wrapper.appendChild(div);
@@ -273,10 +276,17 @@ export function appendBot(segments) {
     pendingBotRow = row;
   } else {
     // Final text arrived — complete the response row
-    const actions = createActionBar([
-      { icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" },
+    // Hide Retry if the preceding user message carried attachments
+    const userRows = dom.messages.querySelectorAll(".msg-row-user");
+    const lastUserRow = userRows.length > 0 ? userRows[userRows.length - 1] : null;
+    const userHasAttachment = lastUserRow && lastUserRow.dataset.hasAttachment;
+    const botActions = [
+      ...(!userHasAttachment
+        ? [{ icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" }]
+        : []),
       { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(plainText, e.currentTarget) },
-    ]);
+    ];
+    const actions = createActionBar(botActions);
 
     if (toolSegs.length > 0) {
       // Action bar inside wrapper, between text and tool calls
@@ -558,9 +568,9 @@ export function setComposerReadonly(readonly) {
   } else {
     dom.msgInput.disabled = false;
     dom.msgInput.placeholder = "Talk to me...";
-    dom.sendBtn.disabled = false;
     dom.attachBtn.disabled = false;
     if (composer) composer.classList.remove("composer-readonly");
     if (existing) existing.remove();
+    updateComposerAvailability();
   }
 }

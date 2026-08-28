@@ -13,7 +13,7 @@ import {
   appendBot, renderHistory, scrollToBottom,
   setComposerReadonly, updateLastActions, initScrollButton,
 } from "./messages.js";
-import { sendMessage, initComposer } from "./composer.js";
+import { sendMessage, initComposer, updateComposerAvailability } from "./composer.js";
 import {
   openPanel, closePanel, closeConvMenu,
   initConversations, mergeConversations, setFavorites,
@@ -38,8 +38,9 @@ function handleMessage(data) {
       break;
 
     case "error":
-      alert(data.message || "Authentication failed");
-      stopReconnect();
+      alert(data.message || "Something went wrong");
+      // Only kill reconnect for auth errors (no message id)
+      if (!data.id) stopReconnect();
       break;
 
     case "message_ack":
@@ -54,6 +55,7 @@ function handleMessage(data) {
         state.isProcessing = false;
         dom.thinkingIndicator.classList.add("hidden");
       }
+      updateComposerAvailability();
       break;
 
     case "message": {
@@ -63,6 +65,7 @@ function handleMessage(data) {
       if (!isIntermediate) {
         state.isProcessing = false;
         dom.thinkingIndicator.classList.add("hidden");
+        updateComposerAvailability();
       }
       if (segs.length > 0) appendBot(segs);
       break;
