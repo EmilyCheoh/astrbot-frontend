@@ -112,13 +112,14 @@ export function initComposer() {
   let dragCounter = 0;
 
   dom.chat.addEventListener("dragenter", (e) => {
+    if (state.isReadonly || !e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
-    if (state.isReadonly) return;
     dragCounter++;
     composerEl.classList.add("drag-over");
   });
 
-  dom.chat.addEventListener("dragleave", () => {
+  dom.chat.addEventListener("dragleave", (e) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
     dragCounter--;
     if (dragCounter <= 0) {
       dragCounter = 0;
@@ -127,10 +128,11 @@ export function initComposer() {
   });
 
   dom.chat.addEventListener("dragover", (e) => {
-    e.preventDefault();
+    if (e.dataTransfer.types.includes("Files")) e.preventDefault();
   });
 
   dom.chat.addEventListener("drop", (e) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
     dragCounter = 0;
     composerEl.classList.remove("drag-over");

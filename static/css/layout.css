@@ -89,20 +89,23 @@
 /* ---- Scroll-to-bottom button ---- */
 .scroll-bottom-btn {
   position: absolute;
-  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
-  right: 24px;
+  bottom: 84px; /* JS overrides dynamically via ResizeObserver */
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 10;
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  border: 1px solid var(--border-default);
-  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s, background 0.15s, color 0.15s;
@@ -114,6 +117,15 @@
 }
 
 .scroll-bottom-btn:hover {
-  background: var(--bg-hover);
+  background: rgba(255, 255, 255, 0.75);
   color: var(--text-primary);
+}
+
+[data-theme="dark"] .scroll-bottom-btn {
+  background: rgba(30, 30, 30, 0.55);
+  border-color: var(--border-default);
+}
+
+[data-theme="dark"] .scroll-bottom-btn:hover {
+  background: rgba(30, 30, 30, 0.75);
 }

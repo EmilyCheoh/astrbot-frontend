@@ -476,12 +476,30 @@ function handleEditClick(userRow) {
 
 export function initScrollButton() {
   const THRESHOLD = 200;
+  const composerSection = document.querySelector(".composer-section");
 
-  dom.chatScroll.addEventListener("scroll", () => {
+  function updateScrollBtn() {
     const distFromBottom =
       dom.chatScroll.scrollHeight - dom.chatScroll.scrollTop - dom.chatScroll.clientHeight;
     dom.scrollBottomBtn.classList.toggle("visible", distFromBottom > THRESHOLD);
-  }, { passive: true });
+  }
+
+  dom.chatScroll.addEventListener("scroll", updateScrollBtn, { passive: true });
+
+  // Track composer height + content/viewport resizes so the button
+  // always floats above the composer and updates after image loads,
+  // orientation changes, conversation switches, etc.
+  const ro = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.target === composerSection) {
+        dom.scrollBottomBtn.style.bottom = (composerSection.offsetHeight + 8) + "px";
+      }
+    }
+    updateScrollBtn();
+  });
+  ro.observe(composerSection);
+  ro.observe(dom.chatScroll);
+  ro.observe(dom.messages);
 
   dom.scrollBottomBtn.addEventListener("click", () => {
     dom.chatScroll.scrollTo({ top: dom.chatScroll.scrollHeight, behavior: "smooth" });
