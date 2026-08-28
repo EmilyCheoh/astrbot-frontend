@@ -484,6 +484,18 @@ class ConversationService:
         except (TypeError, ValueError):
             return value
 
+    @staticmethod
+    def _extract_cot_value(block: dict) -> str:
+        """Extract the text value from a think/thinking content block."""
+        value = (
+            block.get("thinking")
+            or block.get("think")
+            or block.get("text")
+            or block.get("content")
+            or ""
+        )
+        return value if isinstance(value, str) else ""
+
     @classmethod
     def _extract_search_texts(cls, message: dict, mode: str) -> list[str]:
         """Extract searchable text blocks from a single message.
@@ -507,18 +519,10 @@ class ConversationService:
             for block in content:
                 if not isinstance(block, dict):
                     continue
-
                 if block.get("type") not in ("think", "thinking"):
                     continue
-
-                value = (
-                    block.get("thinking")
-                    or block.get("think")
-                    or block.get("text")
-                    or block.get("content")
-                    or ""
-                )
-                if isinstance(value, str) and value:
+                value = cls._extract_cot_value(block)
+                if value:
                     texts.append(value)
 
             return texts
@@ -548,13 +552,7 @@ class ConversationService:
                     if block_type == "text":
                         value = block.get("text") or block.get("content") or ""
                     elif block_type in ("think", "thinking"):
-                        value = (
-                            block.get("thinking")
-                            or block.get("think")
-                            or block.get("text")
-                            or block.get("content")
-                            or ""
-                        )
+                        value = cls._extract_cot_value(block)
                     else:
                         continue
 
@@ -690,16 +688,34 @@ class ConversationService:
                     await ws.send_json({"type": "search_results", "results": [], "mode": mode})
                     return
 
-                escaped = self.to_unicode_escaped(query)
+                # Detect if the query contains characters that get
+                # JSON-escaped (quotes, backslashes, control chars).
+                # When it does, SQL LIKE against the raw JSON will miss
+                # matches inside decoded tool arguments / results, so
+                # we fall back to a full scan and let the structured
+                # extractors handle matching.
+                json_escaped = json.dumps(query, ensure_ascii=False)[1:-1]
+                needs_full_scan = json_escaped != query
 
-                db_cursor = conn.execute(
-                    "SELECT conversation_id, title, updated_at, platform_id, content "
-                    "FROM conversations "
-                    "WHERE platform_id IN ('Abyss', 'Abyss_Den') "
-                    "AND (content LIKE ? OR content LIKE ?) "
-                    "ORDER BY updated_at DESC",
-                    (f"%{query}%", f"%{escaped}%"),
-                )
+                if needs_full_scan:
+                    db_cursor = conn.execute(
+                        "SELECT conversation_id, title, updated_at, "
+                        "platform_id, content "
+                        "FROM conversations "
+                        "WHERE platform_id IN ('Abyss', 'Abyss_Den') "
+                        "ORDER BY updated_at DESC",
+                    )
+                else:
+                    escaped = self.to_unicode_escaped(query)
+                    db_cursor = conn.execute(
+                        "SELECT conversation_id, title, updated_at, "
+                        "platform_id, content "
+                        "FROM conversations "
+                        "WHERE platform_id IN ('Abyss', 'Abyss_Den') "
+                        "AND (content LIKE ? OR content LIKE ?) "
+                        "ORDER BY updated_at DESC",
+                        (f"%{query}%", f"%{escaped}%"),
+                    )
 
                 for row in db_cursor:
                     content = row[4]
