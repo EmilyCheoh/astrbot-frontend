@@ -8,6 +8,7 @@ import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { send, isConnected } from "./socket.js";
 import { closePanel } from "./conversations.js";
+import { formatTime } from "./time.js";
 
 // ---- Open / Close ----
 
@@ -76,23 +77,6 @@ function doSearch() {
     mode: state.searchMode,
     q: q,
   });
-}
-
-// ---- Helpers ----
-
-function formatTime(ts) {
-  if (!ts) return "";
-  try {
-    const d = new Date(ts);
-    if (isNaN(d.getTime())) return ts;
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mi = String(d.getMinutes()).padStart(2, "0");
-    return `${mm}-${dd} ${hh}:${mi}`;
-  } catch {
-    return ts;
-  }
 }
 
 // ---- Render results ----
