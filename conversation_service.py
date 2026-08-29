@@ -521,6 +521,13 @@ class ConversationService:
                 and any(
                     isinstance(block, dict)
                     and block.get("type") in ("thinking", "think")
+                    and str(
+                        block.get("thinking")
+                        or block.get("think")
+                        or block.get("text")
+                        or block.get("content")
+                        or ""
+                    ).strip()
                     for block in content
                 )
             )
