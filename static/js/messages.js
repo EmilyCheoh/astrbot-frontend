@@ -357,9 +357,7 @@ export function finalizePendingBotRow() {
     ...(plainText
       ? [{ icon: ICON_EDIT, title: "Edit", onClick: () => handleAssistantEditClick(row), className: "edit-btn" }]
       : []),
-    ...(plainText
-      ? [{ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" }]
-      : []),
+    { icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" },
     { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(row.dataset.text || "", e.currentTarget) },
   ];
 

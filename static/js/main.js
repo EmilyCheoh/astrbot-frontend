@@ -41,6 +41,7 @@ function handleMessage(data) {
       state.pendingPinIds.clear();
       state.pendingConversationId = null;
       state.activeAnchorId = null;
+      state.isBranching = false;
       break;
 
     case "error":
@@ -150,6 +151,7 @@ function handleMessage(data) {
       break;
 
     case "conversation_created":
+      state.isBranching = false;
       resetUserPatchState();
       state.currentConversationId = data.conversation_id || null;
       state.pendingConversationId = null;

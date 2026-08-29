@@ -513,6 +513,22 @@ class ConversationService:
                 return
             assistant = history[last_assistant_index]
             display_text = cls._extract_branch_text(assistant)
+
+            # Skip assistants the frontend would never render (no segments).
+            content = assistant.get("content")
+            has_thinking = (
+                isinstance(content, list)
+                and any(
+                    isinstance(block, dict)
+                    and block.get("type") in ("thinking", "think")
+                    for block in content
+                )
+            )
+            has_tool_calls = bool(assistant.get("tool_calls"))
+            if not display_text and not has_thinking and not has_tool_calls:
+                last_assistant_index = None
+                return
+
             points.append({
                 "role": "assistant",
                 "cut_index": turn_end_index + 1,
