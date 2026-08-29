@@ -8,6 +8,7 @@ via constructor to avoid circular imports.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import uuid
@@ -310,6 +311,217 @@ class MessageService:
             await ws.send_json({
                 "type": "assistant_message_edit_failed",
                 "conversation_id": conversation_id,
+            })
+        except Exception:
+            pass
+
+    # -- User message patch (no LLM re-fire) --------------------------------
+
+    @staticmethod
+    def _message_revision(message: dict) -> str:
+        """SHA-256 fingerprint of a message for optimistic concurrency."""
+        canonical = json.dumps(
+            message,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    async def _load_active_history(
+        self,
+        requested_cid: str,
+    ) -> tuple[list[dict], str] | None:
+        """Load history for the active conversation, verifying the ID matches."""
+        manager = runtime.conversation_manager
+        if not manager:
+            return None
+
+        active_cid = await manager.get_curr_conversation_id(self._umo)
+        if not active_cid or active_cid != requested_cid:
+            return None
+
+        conversation = await manager.get_conversation(
+            self._umo,
+            active_cid,
+        )
+        if not conversation:
+            return None
+
+        history = json.loads(conversation.history or "[]")
+        if not isinstance(history, list):
+            return None
+
+        return history, active_cid
+
+    @staticmethod
+    def _find_last_user_patch_target(history: list[dict]):
+        """Locate the last user message and its first text block."""
+        for message_index in range(len(history) - 1, -1, -1):
+            message = history[message_index]
+            if not isinstance(message, dict) or message.get("role") != "user":
+                continue
+
+            content = message.get("content")
+
+            if isinstance(content, str):
+                return message_index, None, "string", content
+
+            if isinstance(content, list):
+                for block_index, block in enumerate(content):
+                    if (
+                        isinstance(block, dict)
+                        and block.get("type") == "text"
+                        and isinstance(block.get("text"), str)
+                    ):
+                        return (
+                            message_index,
+                            block_index,
+                            "list",
+                            block["text"],
+                        )
+
+            return None
+
+        return None
+
+    async def handle_prepare_user_message_patch(
+        self,
+        ws: web.WebSocketResponse,
+        conversation_id: str,
+        display_content: str,
+    ):
+        """Prepare a user message patch by returning the stored raw text."""
+        display_content = display_content.strip()
+        if not display_content:
+            await self._send_user_patch_failed(
+                ws, conversation_id, "content_mismatch"
+            )
+            return
+
+        try:
+            loaded = await self._load_active_history(conversation_id)
+            if not loaded:
+                await self._send_user_patch_failed(
+                    ws, conversation_id, "conversation_mismatch"
+                )
+                return
+
+            history, _ = loaded
+            target = self._find_last_user_patch_target(history)
+            if not target:
+                await self._send_user_patch_failed(
+                    ws, conversation_id, "message_not_found"
+                )
+                return
+
+            message_index, block_index, content_kind, raw_text = target
+
+            # Verify the bubble text appears in the stored message
+            if display_content not in raw_text:
+                await self._send_user_patch_failed(
+                    ws, conversation_id, "content_mismatch"
+                )
+                return
+
+            await ws.send_json({
+                "type": "user_message_patch_ready",
+                "conversation_id": conversation_id,
+                "message_index": message_index,
+                "block_index": block_index,
+                "content_kind": content_kind,
+                "raw_text": raw_text,
+                "revision": self._message_revision(
+                    history[message_index]
+                ),
+            })
+
+        except Exception as exc:
+            logger.warning(f"Failed to prepare user message patch: {exc}")
+            await self._send_user_patch_failed(
+                ws, conversation_id, "message_not_found"
+            )
+
+    async def handle_save_user_message_patch(
+        self,
+        ws: web.WebSocketResponse,
+        data: dict,
+    ):
+        """Save a patched user message without triggering LLM response."""
+        conversation_id = data.get("conversation_id", "")
+        message_index = data.get("message_index")
+        block_index = data.get("block_index")
+        content_kind = data.get("content_kind")
+        edited_raw_text = data.get("raw_text", "")
+        revision = data.get("revision", "")
+
+        try:
+            loaded = await self._load_active_history(conversation_id)
+            if not loaded:
+                await self._send_user_patch_failed(
+                    ws, conversation_id, "conversation_mismatch"
+                )
+                return
+
+            history, cid = loaded
+            target = self._find_last_user_patch_target(history)
+            if not target:
+                await self._send_user_patch_failed(
+                    ws, conversation_id, "message_not_found"
+                )
+                return
+
+            current_idx, current_block, current_kind, _ = target
+
+            if (
+                current_idx != message_index
+                or current_block != block_index
+                or current_kind != content_kind
+                or self._message_revision(history[message_index]) != revision
+            ):
+                await self._send_user_patch_failed(
+                    ws, conversation_id, "message_changed"
+                )
+                return
+
+            # Apply the edit
+            target_message = history[message_index]
+            if content_kind == "string":
+                target_message["content"] = edited_raw_text
+            else:
+                target_message["content"][block_index]["text"] = edited_raw_text
+
+            await runtime.conversation_manager.update_conversation(
+                self._umo, cid, history=history,
+            )
+
+            logger.info(f"User message patched in conversation {cid}")
+
+            await ws.send_json({
+                "type": "user_message_patched",
+                "conversation_id": conversation_id,
+                "message_index": message_index,
+                "raw_text": edited_raw_text,
+            })
+
+        except Exception as exc:
+            logger.warning(f"Failed to save user message patch: {exc}")
+            await self._send_user_patch_failed(
+                ws, conversation_id, "message_changed"
+            )
+
+    @staticmethod
+    async def _send_user_patch_failed(
+        ws: web.WebSocketResponse,
+        conversation_id: str,
+        reason: str,
+    ):
+        """Send a patch-failed response."""
+        try:
+            await ws.send_json({
+                "type": "user_message_patch_failed",
+                "conversation_id": conversation_id,
+                "reason": reason,
             })
         except Exception:
             pass

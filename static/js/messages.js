@@ -32,6 +32,7 @@ const ICON_COPY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" s
 const ICON_CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 const ICON_RETRY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>';
 const ICON_EDIT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+const ICON_PATCH = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(-45 12 12)"><rect x="0.9" y="6.9" width="22.2" height="10.2" rx="5.1" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><rect x="9.2" y="9.2" width="5.6" height="5.6" rx="0.7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><circle cx="4.75" cy="10" r="0.55" fill="currentColor"/><circle cx="6.15" cy="13.9" r="0.55" fill="currentColor"/><circle cx="17.85" cy="10.1" r="0.55" fill="currentColor"/><circle cx="19.25" cy="14" r="0.55" fill="currentColor"/></g></svg>';
 
 // ---- Helpers ----
 
@@ -143,6 +144,7 @@ export function appendUser(text, { images = [], files = [], hasAttachment = fals
   // Action bar — skip Edit for attachment messages, skip Copy if no text
   const actionList = [];
   if (!hasAttachment) {
+    actionList.push({ icon: ICON_PATCH, title: "Correct without reply", onClick: () => handleUserPatchClick(wrapper), className: "patch-btn" });
     actionList.push({ icon: ICON_EDIT, title: "Edit", onClick: () => handleEditClick(wrapper), className: "edit-btn" });
   }
   if (text) {
@@ -695,6 +697,201 @@ export function handleAssistantEditFailure() {
   }
 
   pendingAssistantEdit = null;
+}
+
+// ---- User message patch (no LLM re-fire) ----
+
+let pendingUserPatch = null;
+
+function handleUserPatchClick(userRow) {
+  if (
+    state.isProcessing
+    || state.isReadonly
+    || !userRow.classList.contains("is-last")
+    || pendingUserPatch
+    || !isConnected()
+  ) return;
+
+  const displayContent = userRow.dataset.text || "";
+  if (displayContent.trimStart().startsWith("/")) return;
+
+  const patchBtn = userRow.querySelector(".patch-btn");
+  if (patchBtn) patchBtn.disabled = true;
+
+  pendingUserPatch = {
+    phase: "preparing",
+    userRow,
+    patchBtn,
+    displayContent,
+  };
+
+  send({
+    type: "prepare_user_message_patch",
+    conversation_id: state.currentConversationId,
+    display_content: displayContent,
+  });
+}
+
+export function handleUserPatchReady(data) {
+  if (!pendingUserPatch || pendingUserPatch.phase !== "preparing") return;
+  if (data.conversation_id !== state.currentConversationId) {
+    if (pendingUserPatch.patchBtn) pendingUserPatch.patchBtn.disabled = false;
+    pendingUserPatch = null;
+    return;
+  }
+
+  const { userRow } = pendingUserPatch;
+  const msgDiv = userRow.querySelector(".msg-user");
+  const actionsBar = userRow.querySelector(".msg-actions");
+
+  msgDiv.classList.add("hidden");
+  if (actionsBar) actionsBar.classList.add("hidden");
+
+  pendingUserPatch.phase = "editing";
+  pendingUserPatch.originalRawText = data.raw_text;
+  pendingUserPatch.messageIndex = data.message_index;
+  pendingUserPatch.blockIndex = data.block_index;
+  pendingUserPatch.contentKind = data.content_kind;
+  pendingUserPatch.revision = data.revision;
+  pendingUserPatch.msgDiv = msgDiv;
+  pendingUserPatch.actionsBar = actionsBar;
+
+  const editArea = document.createElement("div");
+  editArea.className = "edit-area patch-edit-area";
+  pendingUserPatch.editArea = editArea;
+
+  const label = document.createElement("div");
+  label.className = "patch-edit-label";
+  label.textContent = "Save only";
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "edit-textarea";
+  textarea.value = data.raw_text;
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "edit-btns";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "edit-cancel-btn";
+  cancelBtn.textContent = "Cancel";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "edit-send-btn";
+  saveBtn.textContent = "Save";
+
+  const maxHeight = 400;
+
+  function closePatchEditor() {
+    if (pendingUserPatch?.phase === "saving") return;
+    editArea.remove();
+    msgDiv.classList.remove("hidden");
+    if (actionsBar) actionsBar.classList.remove("hidden");
+    if (pendingUserPatch?.patchBtn) pendingUserPatch.patchBtn.disabled = false;
+    pendingUserPatch = null;
+  }
+
+  cancelBtn.addEventListener("click", closePatchEditor);
+
+  saveBtn.addEventListener("click", () => {
+    if (textarea.value === pendingUserPatch?.originalRawText) {
+      closePatchEditor();
+      return;
+    }
+
+    if (!isConnected()) return;
+
+    editArea.querySelector(".patch-edit-error")?.remove();
+
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    pendingUserPatch.phase = "saving";
+
+    send({
+      type: "save_user_message_patch",
+      conversation_id: state.currentConversationId,
+      message_index: pendingUserPatch.messageIndex,
+      block_index: pendingUserPatch.blockIndex,
+      content_kind: pendingUserPatch.contentKind,
+      raw_text: textarea.value,
+      revision: pendingUserPatch.revision,
+    });
+  });
+
+  textarea.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && pendingUserPatch?.phase !== "saving") {
+      e.preventDefault();
+      e.stopPropagation();
+      closePatchEditor();
+    }
+  });
+
+  textarea.addEventListener("input", () => {
+    textarea.style.height = "auto";
+    textarea.style.height = Math.min(textarea.scrollHeight, maxHeight) + "px";
+  });
+
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(saveBtn);
+  editArea.appendChild(label);
+  editArea.appendChild(textarea);
+  editArea.appendChild(btnRow);
+  userRow.insertBefore(editArea, actionsBar);
+
+  requestAnimationFrame(() => {
+    textarea.style.height = Math.min(textarea.scrollHeight, maxHeight) + "px";
+    textarea.focus();
+  });
+}
+
+export function handleUserPatchSuccess(data) {
+  if (!pendingUserPatch) return;
+
+  const { userRow, msgDiv, actionsBar, editArea } = pendingUserPatch;
+  const rawText = data.raw_text || "";
+
+  msgDiv.textContent = rawText;
+  userRow.dataset.text = rawText;
+
+  if (data.message_index != null && state.currentMessages[data.message_index]) {
+    const msg = state.currentMessages[data.message_index];
+    if (typeof msg.content === "string") {
+      msg.content = rawText;
+    } else if (Array.isArray(msg.content)) {
+      const textBlock = msg.content.find(b => b && b.type === "text");
+      if (textBlock) textBlock.text = rawText;
+    }
+  }
+
+  editArea.remove();
+  msgDiv.classList.remove("hidden");
+  if (actionsBar) actionsBar.classList.remove("hidden");
+  if (pendingUserPatch.patchBtn) pendingUserPatch.patchBtn.disabled = false;
+  pendingUserPatch = null;
+}
+
+export function handleUserPatchFailure(data) {
+  if (!pendingUserPatch) return;
+
+  if (pendingUserPatch.phase === "preparing") {
+    if (pendingUserPatch.patchBtn) pendingUserPatch.patchBtn.disabled = false;
+    pendingUserPatch = null;
+    return;
+  }
+
+  const saveBtn = pendingUserPatch.editArea?.querySelector(".edit-send-btn");
+  const cancelBtnEl = pendingUserPatch.editArea?.querySelector(".edit-cancel-btn");
+  if (saveBtn) saveBtn.disabled = false;
+  if (cancelBtnEl) cancelBtnEl.disabled = false;
+  pendingUserPatch.phase = "editing";
+
+  let errorEl = pendingUserPatch.editArea?.querySelector(".patch-edit-error");
+  if (!errorEl && pendingUserPatch.editArea) {
+    errorEl = document.createElement("div");
+    errorEl.className = "patch-edit-error";
+    errorEl.textContent = "Could not save \u2014 the stored message changed.";
+    const btnRowEl = pendingUserPatch.editArea.querySelector(".edit-btns");
+    pendingUserPatch.editArea.insertBefore(errorEl, btnRowEl);
+  }
 }
 
 // ---- Scroll-to-bottom button ----

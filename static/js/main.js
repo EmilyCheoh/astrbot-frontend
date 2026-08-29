@@ -13,6 +13,7 @@ import {
   appendBot, renderHistory, scrollToBottom,
   setComposerReadonly, updateLastActions, initScrollButton,
   handleAssistantEditSuccess, handleAssistantEditFailure,
+  handleUserPatchReady, handleUserPatchSuccess, handleUserPatchFailure,
 } from "./messages.js";
 import { sendMessage, initComposer, updateComposerAvailability } from "./composer.js";
 import {
@@ -190,6 +191,18 @@ function handleMessage(data) {
 
     case "assistant_message_edit_failed":
       handleAssistantEditFailure();
+      break;
+
+    case "user_message_patch_ready":
+      handleUserPatchReady(data);
+      break;
+
+    case "user_message_patched":
+      handleUserPatchSuccess(data);
+      break;
+
+    case "user_message_patch_failed":
+      handleUserPatchFailure(data);
       break;
 
     case "conversation_deleted": {

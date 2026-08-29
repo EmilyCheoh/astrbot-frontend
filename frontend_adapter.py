@@ -290,6 +290,18 @@ class FrontendAdapter(Platform):
                                 ws, cid, content, original,
                             )
 
+                    # --- User message patch (no LLM re-fire) -------
+                    elif kind == "prepare_user_message_patch":
+                        cid = data.get("conversation_id")
+                        display_content = data.get("display_content", "")
+                        if cid and display_content:
+                            await self.messages.handle_prepare_user_message_patch(
+                                ws, cid, display_content,
+                            )
+
+                    elif kind == "save_user_message_patch":
+                        await self.messages.handle_save_user_message_patch(ws, data)
+
                     # --- Heartbeat -------------------------------------
                     elif kind == "ping":
                         await ws.send_json({"type": "pong"})

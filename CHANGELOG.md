@@ -1,3 +1,7 @@
+edit last user message
+
+---
+
 optimized search function + search by CoT
 
 ---

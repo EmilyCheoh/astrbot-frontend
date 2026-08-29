@@ -240,12 +240,14 @@
    Edit / Retry
    ================================================================ */
 
-/* Hide edit/retry buttons by default — only show on last messages */
+/* Hide edit/retry/patch buttons by default — only show on last messages */
+.msg-action-btn.patch-btn,
 .msg-action-btn.edit-btn,
 .msg-action-btn.retry-btn {
   display: none;
 }
 
+.msg-row-user.is-last .msg-action-btn.patch-btn,
 .msg-row-user.is-last .msg-action-btn.edit-btn,
 .msg-row-bot.is-last .msg-action-btn.edit-btn,
 .msg-row-bot.is-last .msg-action-btn.retry-btn {
@@ -259,6 +261,27 @@
 }
 
 .bot-edit-error {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-supporting);
+}
+
+/* ---- User patch editor ---- */
+.patch-edit-area .edit-textarea {
+  min-height: 160px;
+  max-height: 400px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.patch-edit-label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.patch-edit-error {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.4;
