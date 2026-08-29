@@ -14,6 +14,7 @@ import {
   setComposerReadonly, updateLastActions, initScrollButton,
   handleAssistantEditSuccess, handleAssistantEditFailure,
   handleUserPatchReady, handleUserPatchSuccess, handleUserPatchFailure,
+  resetUserPatchState,
 } from "./messages.js";
 import { sendMessage, initComposer, updateComposerAvailability } from "./composer.js";
 import {
@@ -74,6 +75,7 @@ function handleMessage(data) {
     }
 
     case "history": {
+      resetUserPatchState();
       state.currentConversationId = data.conversation_id || null;
       state.pendingConversationId = null;
       // Clear search anchor if we navigated away from it
@@ -145,6 +147,7 @@ function handleMessage(data) {
       break;
 
     case "conversation_created":
+      resetUserPatchState();
       state.currentConversationId = data.conversation_id || null;
       state.pendingConversationId = null;
       state.activeAnchorId = null;

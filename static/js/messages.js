@@ -144,11 +144,11 @@ export function appendUser(text, { images = [], files = [], hasAttachment = fals
   // Action bar — skip Edit for attachment messages, skip Copy if no text
   const actionList = [];
   if (!hasAttachment) {
-    actionList.push({ icon: ICON_PATCH, title: "Correct without reply", onClick: () => handleUserPatchClick(wrapper), className: "patch-btn" });
     actionList.push({ icon: ICON_EDIT, title: "Edit", onClick: () => handleEditClick(wrapper), className: "edit-btn" });
+    actionList.push({ icon: ICON_PATCH, title: "Correct without reply", onClick: () => handleUserPatchClick(wrapper), className: "patch-btn" });
   }
   if (text) {
-    actionList.push({ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(text, e.currentTarget) });
+    actionList.push({ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(wrapper.dataset.text || "", e.currentTarget) });
   }
   const actions = createActionBar(actionList);
 
@@ -720,6 +720,7 @@ function handleUserPatchClick(userRow) {
 
   pendingUserPatch = {
     phase: "preparing",
+    conversationId: state.currentConversationId,
     userRow,
     patchBtn,
     displayContent,
@@ -843,8 +844,20 @@ export function handleUserPatchReady(data) {
   });
 }
 
+export function resetUserPatchState() {
+  pendingUserPatch = null;
+}
+
 export function handleUserPatchSuccess(data) {
   if (!pendingUserPatch) return;
+
+  if (
+    data.conversation_id !== pendingUserPatch.conversationId
+    || data.conversation_id !== state.currentConversationId
+  ) {
+    pendingUserPatch = null;
+    return;
+  }
 
   const { userRow, msgDiv, actionsBar, editArea } = pendingUserPatch;
   const rawText = data.raw_text || "";
