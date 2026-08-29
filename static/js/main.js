@@ -10,13 +10,16 @@ import { dom } from "./dom.js";
 import { connectWS, send, stopReconnect } from "./socket.js";
 import { cycleTheme, cycleFont } from "./preferences.js";
 import {
-  appendBot, renderHistory, scrollToBottom,
+  appendBot, finalizePendingBotRow, renderHistory, scrollToBottom,
   setComposerReadonly, updateLastActions, initScrollButton,
   handleAssistantEditSuccess, handleAssistantEditFailure,
   handleUserPatchReady, handleUserPatchSuccess, handleUserPatchFailure,
   resetUserPatchState,
 } from "./messages.js";
-import { sendMessage, initComposer, updateComposerAvailability } from "./composer.js";
+import {
+  sendMessage, initComposer, updateComposerAvailability,
+  replaceComposerDraft,
+} from "./composer.js";
 import {
   openPanel, closePanel, closeConvMenu,
   initConversations, mergeConversations, setFavorites,
@@ -55,6 +58,7 @@ function handleMessage(data) {
         dom.thinkingIndicator.classList.remove("hidden");
         scrollToBottom();
       } else {
+        finalizePendingBotRow();
         state.isProcessing = false;
         dom.thinkingIndicator.classList.add("hidden");
       }
@@ -63,18 +67,17 @@ function handleMessage(data) {
 
     case "message": {
       const segs = data.segments || [];
-      const isIntermediate = segs.length > 0
-        && segs.every(s => s.type === "reasoning" || s.type === "tool_call");
-      if (!isIntermediate) {
-        state.isProcessing = false;
-        dom.thinkingIndicator.classList.add("hidden");
-        updateComposerAvailability();
+      if (segs.length > 0) {
+        // During a processing cycle (status: thinking was received),
+        // let status: idle handle finalization.  Standalone pushes
+        // (isProcessing is false) finalize immediately.
+        appendBot(segs, { complete: !state.isProcessing });
       }
-      if (segs.length > 0) appendBot(segs);
       break;
     }
 
     case "history": {
+      state.isBranching = false;
       resetUserPatchState();
       state.currentConversationId = data.conversation_id || null;
       state.pendingConversationId = null;
@@ -157,6 +160,31 @@ function handleMessage(data) {
       setComposerReadonly(false);
       updateComposerAvailability();
       closePanel();
+      break;
+
+    case "conversation_branched": {
+      state.isBranching = false;
+      resetUserPatchState();
+
+      state.currentConversationId = data.conversation_id || null;
+      state.pendingConversationId = null;
+      state.activeAnchorId = null;
+      state.currentMessages = data.messages || [];
+      state.currentConvTitle = data.title || "conversation-branched";
+      state.isReadonly = false;
+
+      dom.messages.innerHTML = "";
+      renderHistory(state.currentMessages);
+      setComposerReadonly(false);
+      replaceComposerDraft(data.draft || "");
+      updateComposerAvailability();
+      renderSidebar();
+      closePanel();
+      break;
+    }
+
+    case "conversation_branch_failed":
+      state.isBranching = false;
       break;
 
     case "search_results":

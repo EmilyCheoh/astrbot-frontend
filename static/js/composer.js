@@ -223,6 +223,17 @@ export function sendMessage() {
   clearPending();
 }
 
+// ---- Draft replacement (used by branch) ----
+
+export function replaceComposerDraft(text = "") {
+  clearPending();
+  dom.msgInput.value = text;
+  dom.msgInput.style.height = "auto";
+  dom.msgInput.style.height = Math.min(dom.msgInput.scrollHeight, 120) + "px";
+  dom.msgInput.focus();
+  updateComposerAvailability();
+}
+
 // ---- Bind events ----
 
 export function initComposer() {

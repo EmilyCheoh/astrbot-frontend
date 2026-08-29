@@ -11,6 +11,7 @@ export const state = {
   pendingReads: 0,         // In-flight FileReader count
   pendingAttachmentBytes: 0,  // Reserved budget (images + files)
   isProcessing: false,
+  isBranching: false,
   batchRendering: false,
   currentMessages: [],
   currentConvTitle: "",

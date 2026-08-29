@@ -238,6 +238,9 @@ class FrontendAdapter(Platform):
                     elif kind == "new_conversation":
                         await self.conversations.handle_new(ws)
 
+                    elif kind == "branch_conversation":
+                        await self.conversations.handle_branch(ws, data)
+
                     elif kind == "search_conversations":
                         await self.conversations.handle_search(ws, data)
 

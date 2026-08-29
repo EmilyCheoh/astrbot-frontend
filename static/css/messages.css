@@ -254,6 +254,12 @@
   display: flex;
 }
 
+/* Branch button: always visible (not gated by .is-last) */
+.msg-action-btn.branch-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 /* ---- Bot edit area (left-aligned, higher specificity) ---- */
 .edit-area.bot-edit-area {
   margin-left: 0;

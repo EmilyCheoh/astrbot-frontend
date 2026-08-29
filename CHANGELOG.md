@@ -1,3 +1,14 @@
+branch conversation from any message
+
++ Branch button on every user and assistant message — creates a new conversation with history sliced to that point
++ User branch: history up to (not including) the clicked message, message text goes into input draft
++ Assistant branch: history up to and including the clicked message (with complete tool call chains), empty draft
++ Works on both Den and QQ (read-only) conversations — QQ branches become new Den conversations
++ Bot response finalization now driven by status: idle signal instead of segment-type guessing
++ isBranching state lock prevents double-click
+
+---
+
 edit last user message
 
 ---

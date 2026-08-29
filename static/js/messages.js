@@ -33,6 +33,7 @@ const ICON_CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" 
 const ICON_RETRY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>';
 const ICON_EDIT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
 const ICON_PATCH = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(-45 12 12)"><rect x="0.9" y="6.9" width="22.2" height="10.2" rx="5.1" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><rect x="9.2" y="9.2" width="5.6" height="5.6" rx="0.7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><circle cx="4.75" cy="10" r="0.55" fill="currentColor"/><circle cx="6.15" cy="13.9" r="0.55" fill="currentColor"/><circle cx="17.85" cy="10.1" r="0.55" fill="currentColor"/><circle cx="19.25" cy="14" r="0.55" fill="currentColor"/></g></svg>';
+const ICON_BRANCH = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h5c3 0 4.5-1.5 6-3l4-4"/><path d="M14 5h4v4"/><path d="m14 15 4 4"/><path d="M14 19h4v-4"/></svg>';
 
 // ---- Helpers ----
 
@@ -53,6 +54,57 @@ function formatToolArgs(argsStr) {
 // Accumulates intermediate segments (thinking, tool calls) into
 // a single bot row until the final text segment arrives.
 let pendingBotRow = null;
+
+// ---- Branch indexing ----
+// Counts only messages that display a Branch button (user messages
+// with text + final assistant messages).  Resets on full history render.
+let nextBranchIndex = 0;
+
+function assignBranchIndex(row) {
+  row.dataset.branchIndex = String(nextBranchIndex);
+  nextBranchIndex += 1;
+}
+
+function findFinalAssistantIndices(messages) {
+  const finalIndices = new Set();
+  let lastAssistantIndex = null;
+
+  function finishTurn() {
+    if (lastAssistantIndex !== null) {
+      finalIndices.add(lastAssistantIndex);
+      lastAssistantIndex = null;
+    }
+  }
+
+  for (let i = 0; i < messages.length; i++) {
+    const role = messages[i]?.role;
+    if (role === "user") {
+      finishTurn();
+    } else if (role === "assistant") {
+      lastAssistantIndex = i;
+    }
+  }
+
+  finishTurn();
+  return finalIndices;
+}
+
+function handleBranchClick(row, role) {
+  if (state.isProcessing || state.isBranching || !isConnected()) return;
+
+  const branchIndex = Number(row.dataset.branchIndex);
+  if (!Number.isInteger(branchIndex)) return;
+
+  state.isBranching = true;
+
+  send({
+    type: "branch_conversation",
+    conversation_id: state.currentConversationId,
+    branch_index: branchIndex,
+    role,
+    display_text: row.dataset.text || "",
+  });
+}
 
 function createActionBar(actions) {
   const bar = document.createElement("div");
@@ -141,6 +193,11 @@ export function appendUser(text, { images = [], files = [], hasAttachment = fals
     div.appendChild(strip);
   }
 
+  // Branch index for user messages with text
+  if (text) {
+    assignBranchIndex(wrapper);
+  }
+
   // Action bar — skip Edit for attachment messages, skip Copy if no text
   const actionList = [];
   if (!hasAttachment) {
@@ -148,6 +205,7 @@ export function appendUser(text, { images = [], files = [], hasAttachment = fals
     actionList.push({ icon: ICON_PATCH, title: "Correct without reply", onClick: () => handleUserPatchClick(wrapper), className: "patch-btn" });
   }
   if (text) {
+    actionList.push({ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(wrapper, "user"), className: "branch-btn" });
     actionList.push({ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(wrapper.dataset.text || "", e.currentTarget) });
   }
   const actions = createActionBar(actionList);
@@ -232,10 +290,7 @@ function appendSegment(wrapper, seg) {
   }
 }
 
-export function appendBot(segments) {
-  const isIntermediate = segments.length > 0
-    && segments.every(s => s.type === "reasoning" || s.type === "tool_call");
-
+export function appendBot(segments, { complete = false } = {}) {
   // Reuse pending row or create a new one
   let row = pendingBotRow;
   let wrapper;
@@ -243,6 +298,7 @@ export function appendBot(segments) {
   if (!row || !row.isConnected) {
     row = document.createElement("div");
     row.className = "msg-row msg-row-bot";
+    row.dataset.text = "";
 
     wrapper = document.createElement("div");
     wrapper.className = "msg-bot";
@@ -253,70 +309,72 @@ export function appendBot(segments) {
     wrapper = row.querySelector(".msg-bot");
   }
 
-  // Separate content segments from tool_call segments
-  const contentSegs = [];
-  const toolSegs = [];
+  // Render all segments and accumulate visible text
   for (const seg of segments) {
-    if (seg.type === "tool_call") toolSegs.push(seg);
-    else contentSegs.push(seg);
-  }
-
-  let plainText = "";
-
-  for (const seg of contentSegs) {
     appendSegment(wrapper, seg);
     if (seg.type === "text") {
-      plainText += seg.data || "";
+      row.dataset.text = (row.dataset.text || "") + (seg.data || "");
     }
   }
 
-  if (isIntermediate) {
-    // Thinking / tool call — render tool calls, hold the row
-    for (const seg of toolSegs) {
-      appendSegment(wrapper, seg);
-    }
-    pendingBotRow = row;
-  } else {
-    // Final text arrived — complete the response row
-    row.dataset.text = plainText;
+  pendingBotRow = row;
 
-    // Hide Retry if the preceding user message carried attachments
-    const userRows = dom.messages.querySelectorAll(".msg-row-user");
-    const lastUserRow = userRows.length > 0 ? userRows[userRows.length - 1] : null;
-    const userHasAttachment = lastUserRow && lastUserRow.dataset.hasAttachment;
-    const botActions = [
-      ...(!userHasAttachment
-        ? [{ icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" }]
-        : []),
-      ...(plainText
-        ? [{ icon: ICON_EDIT, title: "Edit", onClick: () => handleAssistantEditClick(row), className: "edit-btn" }]
-        : []),
-      { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(row.dataset.text || "", e.currentTarget) },
-    ];
-    const actions = createActionBar(botActions);
-
-    if (toolSegs.length > 0) {
-      // Action bar inside wrapper, between text and tool calls
-      wrapper.appendChild(actions);
-      for (const seg of toolSegs) {
-        appendSegment(wrapper, seg);
-      }
-    } else {
-      // No tool calls — action bar on the row as usual
-      row.appendChild(actions);
-    }
-
-    pendingBotRow = null;
+  if (complete) {
+    finalizePendingBotRow();
   }
 
   if (!state.batchRendering) updateLastActions();
   scrollToBottom();
 }
 
+export function finalizePendingBotRow() {
+  const row = pendingBotRow;
+  if (!row || !row.isConnected) {
+    pendingBotRow = null;
+    return;
+  }
+
+  // Prevent double finalization
+  if (row.dataset.complete === "true") {
+    pendingBotRow = null;
+    return;
+  }
+
+  row.dataset.complete = "true";
+  const plainText = row.dataset.text || "";
+
+  assignBranchIndex(row);
+
+  // Hide Retry if the preceding user message carried attachments
+  const userRows = dom.messages.querySelectorAll(".msg-row-user");
+  const lastUserRow = userRows.length > 0 ? userRows[userRows.length - 1] : null;
+  const userHasAttachment = lastUserRow && lastUserRow.dataset.hasAttachment;
+
+  const botActions = [
+    ...(!userHasAttachment
+      ? [{ icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" }]
+      : []),
+    ...(plainText
+      ? [{ icon: ICON_EDIT, title: "Edit", onClick: () => handleAssistantEditClick(row), className: "edit-btn" }]
+      : []),
+    ...(plainText
+      ? [{ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" }]
+      : []),
+    { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(row.dataset.text || "", e.currentTarget) },
+  ];
+
+  row.appendChild(createActionBar(botActions));
+
+  pendingBotRow = null;
+  updateLastActions();
+}
+
 // ---- Render full history ----
 
 export function renderHistory(messages) {
+  nextBranchIndex = 0;
   state.batchRendering = true;
+  const finalAssistantIndices = findFinalAssistantIndices(messages);
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
     const role = msg.role || "system";
@@ -376,7 +434,7 @@ export function renderHistory(messages) {
         }
       }
       if (segments.length > 0) {
-        appendBot(segments);
+        appendBot(segments, { complete: finalAssistantIndices.has(i) });
       }
     }
   }
