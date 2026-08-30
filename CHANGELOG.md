@@ -1,3 +1,7 @@
+不许edit有工具调用的回复
+
+---
+
 branch conversation from any message
 
 + Branch button on every user and assistant message — creates a new conversation with history sliced to that point

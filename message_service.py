@@ -233,6 +233,22 @@ class MessageService:
                 await self._send_edit_failed(ws, conversation_id)
                 return
 
+            # Reject if the current turn contains tool activity
+            turn_has_tool_activity = any(
+                isinstance(message, dict)
+                and (
+                    message.get("role") == "tool"
+                    or bool(message.get("tool_calls"))
+                )
+                for message in history[last_user_idx + 1 :]
+            )
+            if turn_has_tool_activity:
+                logger.warning(
+                    "Assistant edit rejected: current reply contains tool activity"
+                )
+                await self._send_edit_failed(ws, conversation_id)
+                return
+
             # Find last assistant with visible text AFTER last user message
             target_idx = None
             for i in range(len(history) - 1, last_user_idx, -1):

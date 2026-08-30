@@ -362,8 +362,8 @@ export function finalizePendingBotRow() {
     ...(!userHasAttachment
       ? [{ icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" }]
       : []),
-    ...(plainText
-      ? [{ icon: ICON_EDIT, title: "Edit", onClick: () => handleAssistantEditClick(row), className: "edit-btn" }]
+    ...(plainText && !hasToolCall
+      ? [{ icon: ICON_PATCH, title: "Edit response", onClick: () => handleAssistantEditClick(row), className: "edit-btn" }]
       : []),
     ...(branchable
       ? [{ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" }]
