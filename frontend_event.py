@@ -46,15 +46,16 @@ class FrontendEvent(AstrMessageEvent):
         # Always call super — lets AstrBot run post-send hooks
         await super().send(message)
 
-        # If on_agent_done already flagged this send as the final one,
-        # emit idle now (after super() so after_message_sent can still
-        # fire as a fallback for edge cases).
-        if self.get_extra("_den_finish_after_send"):
-            self.set_extra("_den_finish_after_send", False)
-            await self.send_idle_once()
-        elif self.get_extra("_den_agent_active") is None:
-            # Ordinary command/plugin direct send — no agent lifecycle
-            # exists for this event.  Send idle so the composer unlocks.
+        # Direct send from a command/plugin that bypasses RespondStage
+        # entirely (no agent lifecycle, no pipeline result).  Send idle
+        # here because after_message_sent will never fire for these.
+        # When a pipeline result IS set, RespondStage may split the
+        # response into multiple send() calls (e.g. text + TTS audio),
+        # so we must wait for after_message_sent to finalise.
+        if (
+            self.get_extra("_den_agent_active") is None
+            and self.get_result() is None
+        ):
             await self.send_idle_once()
 
     async def send_idle_once(self):
