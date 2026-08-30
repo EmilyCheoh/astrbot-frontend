@@ -168,6 +168,48 @@ class ConversationService:
             )
         return None
 
+    async def align_cid(self) -> str | None:
+        """Align AstrBot's CID pointer with the latest Den conversation.
+
+        Queries the most recently updated Den conversation from the DB,
+        then calls ``switch_conversation()`` so AstrBot's internal
+        pointer matches what the frontend will display.
+
+        Returns the aligned CID, or ``None`` if no conversation exists.
+        Must be called BEFORE sending ``auth_ok`` to prevent a race
+        where the client sends a message before the pointer is aligned.
+        """
+        try:
+            platform_id = self._config.get("id", "abyss_web")
+            db_path = self.find_db()
+            if not db_path:
+                return None
+
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            try:
+                cursor = conn.execute(
+                    "SELECT conversation_id FROM conversations "
+                    "WHERE platform_id = ? ORDER BY updated_at DESC LIMIT 1",
+                    (platform_id,),
+                )
+                row = cursor.fetchone()
+            finally:
+                conn.close()
+
+            if not row:
+                return None
+
+            cid = row[0]
+            if runtime.conversation_manager:
+                await runtime.conversation_manager.switch_conversation(
+                    self._umo, cid,
+                )
+            return cid
+
+        except Exception as exc:
+            logger.warning(f"CID alignment failed: {exc}")
+            return None
+
     # -- Navigation failure helper --------------------------------------------
 
     @staticmethod

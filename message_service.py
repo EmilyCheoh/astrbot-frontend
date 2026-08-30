@@ -46,8 +46,15 @@ class MessageService:
         self._conversations = conversations
         self._umo = umo
 
-    async def on_message(self, data: dict, ws: web.WebSocketResponse):
-        """Convert an incoming frontend message and commit it to the queue."""
+    async def on_message(
+        self, data: dict, ws: web.WebSocketResponse, turn_token: object,
+    ) -> bool:
+        """Convert an incoming frontend message and commit it to the queue.
+
+        Returns ``True`` if the event was committed (turn is now owned by
+        the pipeline).  Returns ``False`` if processing failed before
+        commit — the caller must release the turn and send idle.
+        """
 
         # Acknowledge receipt immediately
         msg_id = data.get("id", str(uuid.uuid4()))
@@ -100,12 +107,10 @@ class MessageService:
                 "id": msg_id,
                 "message": "Failed to save attached file",
             })
-            await ws.send_json({"type": "status", "status": "idle"})
-            return
+            return False
 
         if not chain:
-            await ws.send_json({"type": "status", "status": "idle"})
-            return
+            return False
 
         # ---- Build AstrBotMessage ------------------------------------------
         abm = AstrBotMessage()
@@ -128,6 +133,8 @@ class MessageService:
             platform_meta=self._adapter.meta(),
             session_id=abm.session_id,
             adapter=self._adapter,
+            source_ws=ws,
+            turn_token=turn_token,
         )
 
         # Register temp files so AstrBot cleans them up
@@ -135,24 +142,31 @@ class MessageService:
             event.track_temporary_local_file(fp)
 
         self._adapter.commit_event(event)
+        return True
 
     # -- Retry / Edit --------------------------------------------------------
 
-    async def handle_retry_or_edit(self, ws: web.WebSocketResponse, content: str, *, action: str = "retry"):
-        """Handle retry or edit: truncate last exchange, re-fire message."""
+    async def handle_retry_or_edit(
+        self, ws: web.WebSocketResponse, content: str,
+        *, action: str = "retry", turn_token: object = None,
+    ) -> bool:
+        """Handle retry or edit: truncate last exchange, re-fire message.
+
+        Returns ``True`` if the event was committed (turn owned by
+        pipeline).  Returns ``False`` if processing failed before commit
+        — the caller must release the turn and send idle.
+        """
         if not content.strip():
-            await ws.send_json({"type": "status", "status": "idle"})
-            return
+            return False
 
         success = await self._truncate_last_exchange(expected_content=content, action=action)
         if not success:
             logger.warning("Retry/edit failed: could not truncate history")
-            await ws.send_json({"type": "status", "status": "idle"})
-            return
+            return False
 
         # Re-fire as a normal message through the standard pipeline
-        await self.on_message(
-            {"content": content, "id": str(uuid.uuid4())}, ws,
+        return await self.on_message(
+            {"content": content, "id": str(uuid.uuid4())}, ws, turn_token,
         )
 
     # -- Edit assistant reply (no LLM re-fire) --------------------------------

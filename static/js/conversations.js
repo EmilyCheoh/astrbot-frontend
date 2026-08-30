@@ -304,6 +304,7 @@ function createConvItem(conv) {
 
   btn.addEventListener("click", (e) => {
     if (e.target.closest(".conv-menu-btn, .conv-rename-input")) return;
+    if (state.isProcessing) return;
     state.currentConvTitle = conv.preview || "conversation";
 
     if (!isConnected()) return;
@@ -576,7 +577,7 @@ export function initConversations() {
   dom.panelToggle.addEventListener("click", openPanel);
   dom.panelOverlay.addEventListener("click", closePanel);
   dom.newConvBtn.addEventListener("click", () => {
-    if (!isConnected()) return;
+    if (!isConnected() || state.isProcessing) return;
     send({ type: "new_conversation" });
   });
 

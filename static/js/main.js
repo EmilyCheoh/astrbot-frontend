@@ -33,6 +33,8 @@ import { initExport } from "./export.js";
 function handleMessage(data) {
   switch (data.type) {
     case "auth_ok":
+      dom.loginBtn.disabled = false;
+      dom.loginBtn.textContent = "Login";
       dom.login.classList.add("hidden");
       dom.chat.classList.remove("hidden");
       dom.thinkingIndicator.classList.add("hidden");
@@ -44,10 +46,39 @@ function handleMessage(data) {
       state.isBranching = false;
       break;
 
+    case "takeover_waiting":
+      // Server accepted our token but an old session has an active reply.
+      // Keep the login screen visible; disable the button until auth_ok.
+      dom.loginBtn.disabled = true;
+      dom.loginBtn.textContent = "Waiting\u2026";
+      break;
+
+    case "session_replaced":
+      // Another device/tab took over — return to login, stop reconnecting.
+      stopReconnect();
+      state.isProcessing = false;
+      state.isBranching = false;
+      state.pendingConversationId = null;
+      dom.chat.classList.add("hidden");
+      dom.login.classList.remove("hidden");
+      dom.thinkingIndicator.classList.add("hidden");
+      dom.tokenInput.value = "";
+      dom.tokenInput.placeholder = "I\u2019m waiting for you in another window, little cat.";
+      updateComposerAvailability();
+      break;
+
     case "error":
-      alert(data.message || "Something went wrong");
-      // Only kill reconnect for auth errors (no message id)
-      if (!data.id) stopReconnect();
+      if (data.code === "rate_limited") {
+        alert(data.message || "Too many failed attempts.");
+        stopReconnect();
+      } else if (data.code === "invalid_token") {
+        alert(data.message || "Invalid token.");
+        stopReconnect();
+      } else if (data.code === "busy") {
+        // Server rejected an action during an active reply — silent
+      } else {
+        if (data.message) alert(data.message);
+      }
       break;
 
     case "message_ack":
@@ -252,9 +283,15 @@ function handleMessage(data) {
 
 // ---- Login ----
 
-dom.loginBtn.addEventListener("click", () => connectWS(dom.tokenInput.value, handleMessage));
+dom.loginBtn.addEventListener("click", () => {
+  dom.tokenInput.placeholder = "Token";
+  connectWS(dom.tokenInput.value, handleMessage);
+});
 dom.tokenInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") connectWS(dom.tokenInput.value, handleMessage);
+  if (e.key === "Enter") {
+    dom.tokenInput.placeholder = "Token";
+    connectWS(dom.tokenInput.value, handleMessage);
+  }
 });
 
 // ---- Header buttons ----

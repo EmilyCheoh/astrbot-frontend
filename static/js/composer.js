@@ -216,6 +216,12 @@ export function sendMessage() {
 
   const hasAttachment = images.length > 0 || files.length > 0;
 
+  // Lock composer immediately — do not wait for server's "thinking" status.
+  // Closes the window where a fast user could switch conversations or
+  // double-submit before the server acknowledges.
+  state.isProcessing = true;
+  updateComposerAvailability();
+
   send(payload);
   appendUser(text, { images, files, hasAttachment });
   dom.msgInput.value = "";

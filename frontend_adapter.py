@@ -2,6 +2,10 @@
 
 Runs a lightweight WebSocket server so Felis Abyssalis can reach AstrBot
 through a dedicated web UI, independent of QQ / NapCat.
+
+Single-client exclusive access: at most one authenticated browser tab or
+device holds the Den at any time.  New logins replace the old client after
+in-flight turns finish and history is saved.
 """
 
 import asyncio
@@ -25,6 +29,22 @@ from .media_utils import chain_to_segments
 from .message_service import MessageService
 
 
+# -- Message kinds that start a new pipeline turn ----------------------------
+_TURN_KINDS = frozenset({"message", "retry", "edit_message"})
+
+# -- Message kinds frozen while a turn is active -----------------------------
+_FROZEN_KINDS = frozenset({
+    "switch_conversation",
+    "new_conversation",
+    "branch_conversation",
+    "view_history",
+    "delete_conversation",
+    "edit_assistant_message",
+    "prepare_user_message_patch",
+    "save_user_message_patch",
+})
+
+
 # ---------------------------------------------------------------------------
 # Platform adapter registration
 # ---------------------------------------------------------------------------
@@ -42,10 +62,7 @@ class FrontendAdapter(Platform):
 
     def __init__(self, config: dict, platform_settings: dict, event_queue: asyncio.Queue) -> None:
         super().__init__(config, event_queue)
-        # Currently active WebSocket connection (single-user)
-        self._active_ws: web.WebSocketResponse | None = None
         self._static_dir = Path(__file__).parent / "static"
-        # conversation_manager is accessed via runtime module (set by Main)
 
         # Auth rate limiter (transport-agnostic state)
         self.auth_guard = AuthGuard(fail_limit=5, window=600, lock_duration=600)
@@ -57,6 +74,24 @@ class FrontendAdapter(Platform):
         self.messages = MessageService(
             adapter=self, conversations=self.conversations, umo=self._umo,
         )
+
+        # -- Single-client ownership state ----------------------------------
+        self._active_ws: web.WebSocketResponse | None = None
+
+        # Serialises multiple concurrent legitimate logins
+        self._takeover_lock = asyncio.Lock()
+        # Mutual exclusion between takeover steps and per-frame dispatch
+        self._dispatch_lock = asyncio.Lock()
+        # True while a new client waits for the old turn to finish
+        self._handoff_pending: bool = False
+
+        # -- Turn lease state -----------------------------------------------
+        # Token is a unique `object()` — identity comparison prevents stale
+        # cleanup from releasing a newer turn.
+        self._turn_token: object | None = None
+        self._turn_owner_ws: web.WebSocketResponse | None = None
+        self._turn_finished: asyncio.Event = asyncio.Event()
+        self._turn_finished.set()  # no turn in progress initially
 
     # -- Required overrides --------------------------------------------------
 
@@ -105,7 +140,11 @@ class FrontendAdapter(Platform):
     async def send_by_session(
         self, session, message_chain: MessageChain
     ):
-        """Active push — used by context.send_message()."""
+        """Active push — used by context.send_message().
+
+        Always routes to the current ``_active_ws``, NOT to any specific
+        source socket.  This preserves existing push behaviour.
+        """
         ws = self._active_ws
         if ws is not None and not ws.closed:
             segments = await chain_to_segments(message_chain)
@@ -135,6 +174,90 @@ class FrontendAdapter(Platform):
             "message": "Too many failed attempts. Try again later.",
             "retry_after": self.auth_guard.retry_after(),
         })
+
+    # -- Turn lease ----------------------------------------------------------
+
+    def _acquire_turn(self, ws: web.WebSocketResponse) -> object | None:
+        """Try to acquire the pipeline turn.
+
+        MUST be called under ``_dispatch_lock``.
+        Returns a unique token on success, ``None`` if a turn is active.
+        """
+        if self._turn_token is not None:
+            return None
+        token = object()
+        self._turn_token = token
+        self._turn_owner_ws = ws
+        self._turn_finished.clear()
+        return token
+
+    def finish_turn(self, token: object) -> None:
+        """Release the pipeline turn.
+
+        Only succeeds if *token* identity matches the active turn token.
+        Safe to call from any coroutine — synchronous, no locks needed.
+        """
+        if token is not self._turn_token:
+            return
+        self._turn_token = None
+        self._turn_owner_ws = None
+        self._turn_finished.set()
+
+    # -- Takeover sequence ---------------------------------------------------
+
+    async def _handle_takeover(self, new_ws: web.WebSocketResponse) -> bool:
+        """Execute the single-client handoff sequence.
+
+        Returns ``True`` if *new_ws* is now the active client.
+        Returns ``False`` if the handoff was cancelled (candidate died).
+        """
+        async with self._takeover_lock:
+            old_ws = self._active_ws
+
+            if old_ws is not None and not old_ws.closed and old_ws is not new_ws:
+                # -- Existing connection: drain and hand off -----------------
+
+                # Step 1: set handoff pending (briefly hold dispatch lock)
+                async with self._dispatch_lock:
+                    self._handoff_pending = True
+
+                # Step 2: wait for active turn (NO lock held)
+                if not self._turn_finished.is_set():
+                    try:
+                        await new_ws.send_json({"type": "takeover_waiting"})
+                    except Exception:
+                        # Candidate died before we could notify
+                        async with self._dispatch_lock:
+                            self._handoff_pending = False
+                        return False
+
+                    await self._turn_finished.wait()
+
+                # Step 3: reacquire dispatch lock for final handoff
+                async with self._dispatch_lock:
+                    # Verify candidate is still alive
+                    if new_ws.closed:
+                        self._handoff_pending = False
+                        return False
+
+                    # Notify and close old connection
+                    try:
+                        await old_ws.send_json({"type": "session_replaced"})
+                    except Exception:
+                        pass
+                    try:
+                        await old_ws.close(code=4001, message=b"session_replaced")
+                    except Exception:
+                        pass
+
+                    # Install new client
+                    self._active_ws = new_ws
+                    self._handoff_pending = False
+            else:
+                # No existing connection or already closed
+                self._active_ws = new_ws
+
+            return True
 
     # -- WebSocket handler ---------------------------------------------------
 
@@ -174,7 +297,6 @@ class FrontendAdapter(Platform):
             return ws
 
         # -- Second lock check (auth message time) ----------------------
-        # Prevents pre-established connections from bypassing lockout
         if self.auth_guard.is_locked():
             await self._send_rate_limited(ws)
             await ws.close()
@@ -185,28 +307,37 @@ class FrontendAdapter(Platform):
             data.get("token", ""),
             self.config.get("token", ""),
         ):
-            # Record failure synchronously — no await between check and record
             self.auth_guard.record_failure()
             if self.auth_guard.is_locked():
                 await self._send_rate_limited(ws)
             else:
-                await ws.send_json(
-                    {"type": "error", "message": "Invalid token"}
-                )
+                await ws.send_json({
+                    "type": "error",
+                    "code": "invalid_token",
+                    "message": "Invalid token",
+                })
             await ws.close()
             return ws
 
         # -- Auth success -----------------------------------------------
         self.auth_guard.clear_failures()
-        self._active_ws = ws
+
+        # Execute single-client handoff
+        accepted = await self._handle_takeover(ws)
+        if not accepted:
+            # Candidate ws died during handoff wait
+            return ws
+
+        # Align AstrBot's CID pointer with the latest Den conversation,
+        # then send initial data.  CID alignment MUST precede auth_ok
+        # so any immediately-sent message targets the correct conversation.
+        cid = await self.conversations.align_cid()
         await ws.send_json({"type": "auth_ok"})
-        await self.conversations.send_history(ws)
+        await self.conversations.send_history(ws, conversation_id=cid)
         await self.conversations.send_favorites(ws)
         logger.info("Web frontend client authenticated.")
 
         # -- Authenticated message loop ---------------------------------
-        # All handlers below are inherently authenticated — the loop
-        # only runs after successful auth above.
         try:
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
@@ -217,12 +348,69 @@ class FrontendAdapter(Platform):
 
                     kind = data.get("type")
 
-                    # --- Incoming chat message --------------------------
-                    if kind == "message":
-                        await self.messages.on_message(data, ws)
+                    # --- Heartbeat (always allowed) --------------------
+                    if kind == "ping":
+                        try:
+                            await ws.send_json({"type": "pong"})
+                        except Exception:
+                            pass
+                        continue
+
+                    # --- Ownership and state gate ----------------------
+                    turn_token = None
+                    skip = False
+
+                    async with self._dispatch_lock:
+                        if ws is not self._active_ws:
+                            skip = True
+                        elif self._handoff_pending:
+                            skip = True
+                        elif kind in _TURN_KINDS:
+                            turn_token = self._acquire_turn(ws)
+                            if turn_token is None:
+                                skip = True
+                        elif kind in _FROZEN_KINDS and self._turn_token is not None:
+                            try:
+                                await ws.send_json({
+                                    "type": "error",
+                                    "code": "busy",
+                                    "message": "Please wait for the current reply to finish.",
+                                })
+                            except Exception:
+                                pass
+                            skip = True
+
+                    if skip:
+                        continue
+
+                    # --- Turn-starting operations ----------------------
+                    if kind in _TURN_KINDS:
+                        committed = False
+                        try:
+                            if kind == "message":
+                                committed = await self.messages.on_message(
+                                    data, ws, turn_token,
+                                )
+                            else:
+                                committed = await self.messages.handle_retry_or_edit(
+                                    ws, data.get("content", ""),
+                                    action="retry" if kind == "retry" else "edit",
+                                    turn_token=turn_token,
+                                )
+                        except Exception as exc:
+                            logger.warning(f"Turn processing error ({kind}): {exc}")
+                        finally:
+                            if not committed:
+                                try:
+                                    if not ws.closed:
+                                        await ws.send_json({"type": "status", "status": "idle"})
+                                except Exception:
+                                    pass
+                                self.finish_turn(turn_token)
+                        continue
 
                     # --- Conversation management -----------------------
-                    elif kind == "list_conversations":
+                    if kind == "list_conversations":
                         cur = data.get("cursor")
                         limit = data.get("limit", 20)
                         gen = data.get("generation")
@@ -274,16 +462,6 @@ class FrontendAdapter(Platform):
                             await self.conversations.handle_delete(ws, cid, pid)
 
                     # --- Edit / Retry ----------------------------------
-                    elif kind == "retry":
-                        await self.messages.handle_retry_or_edit(
-                            ws, data.get("content", ""), action="retry",
-                        )
-
-                    elif kind == "edit_message":
-                        await self.messages.handle_retry_or_edit(
-                            ws, data.get("content", ""), action="edit",
-                        )
-
                     elif kind == "edit_assistant_message":
                         cid = data.get("conversation_id")
                         content = data.get("content", "").strip()
@@ -305,10 +483,6 @@ class FrontendAdapter(Platform):
                     elif kind == "save_user_message_patch":
                         await self.messages.handle_save_user_message_patch(ws, data)
 
-                    # --- Heartbeat -------------------------------------
-                    elif kind == "ping":
-                        await ws.send_json({"type": "pong"})
-
                 elif msg.type in (
                     aiohttp.WSMsgType.ERROR,
                     aiohttp.WSMsgType.CLOSE,
@@ -320,5 +494,3 @@ class FrontendAdapter(Platform):
             logger.info("Web frontend client disconnected.")
 
         return ws
-
-

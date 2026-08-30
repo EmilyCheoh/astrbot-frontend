@@ -6,6 +6,7 @@
 import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { send, isConnected } from "./socket.js";
+import { updateComposerAvailability } from "./composer.js";
 
 // ---- Markdown rendering ----
 
@@ -511,6 +512,10 @@ function handleRetry(botRow) {
   pendingBotRow = null;
   updateLastActions();
 
+  // Lock immediately — do not wait for server's "thinking" status
+  state.isProcessing = true;
+  updateComposerAvailability();
+
   send({ type: "retry", content: userText });
 }
 
@@ -569,6 +574,10 @@ function handleEditClick(userRow) {
       node = next;
     }
     pendingBotRow = null;
+
+    // Lock immediately — do not wait for server's "thinking" status
+    state.isProcessing = true;
+    updateComposerAvailability();
 
     send({ type: "edit_message", content: newText });
     updateLastActions();
