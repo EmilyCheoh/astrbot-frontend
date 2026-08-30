@@ -187,6 +187,7 @@ function handleMessage(data) {
 
     case "conversation_branch_failed":
       state.isBranching = false;
+      alert("Couldn't create the branch.");
       break;
 
     case "search_results":

@@ -343,7 +343,16 @@ export function finalizePendingBotRow() {
   row.dataset.complete = "true";
   const plainText = row.dataset.text || "";
 
-  assignBranchIndex(row);
+  // Determine whether this row represents a branch-eligible assistant reply.
+  // Pure CoT rows must never consume a branch_index — otherwise every
+  // later index becomes offset from the backend's sequential numbering.
+  const hasToolCall = !!row.querySelector(".tool-call-block");
+  const hasMedia = !!row.querySelector("img, audio");
+  const branchable = !!plainText || hasToolCall || hasMedia;
+
+  if (branchable) {
+    assignBranchIndex(row);
+  }
 
   // Hide Retry if the preceding user message carried attachments
   const userRows = dom.messages.querySelectorAll(".msg-row-user");
@@ -357,11 +366,17 @@ export function finalizePendingBotRow() {
     ...(plainText
       ? [{ icon: ICON_EDIT, title: "Edit", onClick: () => handleAssistantEditClick(row), className: "edit-btn" }]
       : []),
-    { icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" },
-    { icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(row.dataset.text || "", e.currentTarget) },
+    ...(branchable
+      ? [{ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" }]
+      : []),
+    ...(plainText
+      ? [{ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(row.dataset.text || "", e.currentTarget) }]
+      : []),
   ];
 
-  row.appendChild(createActionBar(botActions));
+  if (botActions.length > 0) {
+    row.appendChild(createActionBar(botActions));
+  }
 
   pendingBotRow = null;
   updateLastActions();

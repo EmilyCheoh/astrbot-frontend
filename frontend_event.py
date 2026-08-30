@@ -31,15 +31,40 @@ class FrontendEvent(AstrMessageEvent):
         self._adapter = adapter
 
     async def send(self, message: MessageChain):
-        """Push the response back through the active WebSocket connection."""
+        """Push the response back through the active WebSocket connection.
+
+        Does NOT emit ``status: idle`` automatically — the lifecycle
+        hooks in ``main.py`` determine the correct moment to finalise
+        the turn via :meth:`send_idle_once`.
+        """
         ws = self._adapter._active_ws
 
         if ws is not None and not ws.closed:
             segments = await chain_to_segments(message)
             await ws.send_json({"type": "message", "segments": segments})
 
-            # Clear the "thinking" indicator
-            await ws.send_json({"type": "status", "status": "idle"})
-
         # Always call super — lets AstrBot run post-send hooks
         await super().send(message)
+
+        # If on_agent_done already flagged this send as the final one,
+        # emit idle now (after super() so after_message_sent can still
+        # fire as a fallback for edge cases).
+        if self.get_extra("_den_finish_after_send"):
+            self.set_extra("_den_finish_after_send", False)
+            await self.send_idle_once()
+
+    async def send_idle_once(self):
+        """Send ``status: idle`` to the frontend at most once per event.
+
+        Idempotent — safe to call multiple times; only the first call
+        actually transmits.  Stored state lives in event extras so it
+        is scoped to this single event, not to the adapter.
+        """
+        if self.get_extra("_den_idle_sent"):
+            return
+
+        ws = self._adapter._active_ws
+        if ws is not None and not ws.closed:
+            await ws.send_json({"type": "status", "status": "idle"})
+
+        self.set_extra("_den_idle_sent", True)

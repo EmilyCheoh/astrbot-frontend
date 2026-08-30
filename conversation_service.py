@@ -514,25 +514,13 @@ class ConversationService:
             assistant = history[last_assistant_index]
             display_text = cls._extract_branch_text(assistant)
 
-            # Skip assistants the frontend would never render (no segments).
-            content = assistant.get("content")
-            has_thinking = (
-                isinstance(content, list)
-                and any(
-                    isinstance(block, dict)
-                    and block.get("type") in ("thinking", "think")
-                    and str(
-                        block.get("thinking")
-                        or block.get("think")
-                        or block.get("text")
-                        or block.get("content")
-                        or ""
-                    ).strip()
-                    for block in content
-                )
-            )
+            # Skip assistants the frontend would never show a Branch for.
+            # A thinking-only entry is rendered as a CoT block but does
+            # not receive a branch_index on the frontend, so the backend
+            # must not create a branch point for it either — otherwise
+            # the sequential indices drift apart.
             has_tool_calls = bool(assistant.get("tool_calls"))
-            if not display_text and not has_thinking and not has_tool_calls:
+            if not display_text and not has_tool_calls:
                 last_assistant_index = None
                 return
 
