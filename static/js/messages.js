@@ -347,8 +347,7 @@ export function finalizePendingBotRow() {
   // Pure CoT rows must never consume a branch_index — otherwise every
   // later index becomes offset from the backend's sequential numbering.
   const hasToolCall = !!row.querySelector(".tool-call-block");
-  const hasMedia = !!row.querySelector("img, audio");
-  const branchable = !!plainText || hasToolCall || hasMedia;
+  const branchable = !!plainText || hasToolCall;
 
   if (branchable) {
     assignBranchIndex(row);

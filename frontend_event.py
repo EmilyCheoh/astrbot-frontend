@@ -52,6 +52,10 @@ class FrontendEvent(AstrMessageEvent):
         if self.get_extra("_den_finish_after_send"):
             self.set_extra("_den_finish_after_send", False)
             await self.send_idle_once()
+        elif self.get_extra("_den_agent_active") is None:
+            # Ordinary command/plugin direct send — no agent lifecycle
+            # exists for this event.  Send idle so the composer unlocks.
+            await self.send_idle_once()
 
     async def send_idle_once(self):
         """Send ``status: idle`` to the frontend at most once per event.

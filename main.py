@@ -27,7 +27,7 @@ class Main(Star):
             return
         event.set_extra("_den_agent_active", True)
 
-    @filter.on_agent_done()
+    @filter.on_agent_done(priority=-10000)
     async def _den_agent_done(self, event: AstrMessageEvent, run_context, resp):
         if not isinstance(event, FrontendEvent):
             return
@@ -38,7 +38,10 @@ class Main(Star):
         # RespondStage, so we must NOT send idle here when there is
         # still content to deliver — otherwise the frontend would
         # finalise the row before the last segments arrive.
-        has_text = bool(getattr(resp, "completion_text", None))
+        completion_text = getattr(resp, "completion_text", None)
+        has_text = bool(
+            isinstance(completion_text, str) and completion_text.strip()
+        )
         has_chain = bool(
             getattr(resp, "result_chain", None)
             and getattr(resp.result_chain, "chain", None)
