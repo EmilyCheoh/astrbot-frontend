@@ -210,37 +210,41 @@ class FrontendAdapter(Platform):
 
         Returns ``True`` if *new_ws* is now the active client.
         Returns ``False`` if the handoff was cancelled (candidate died).
+
+        Turn wait is unconditional — a disconnected old socket does NOT
+        cancel the in-flight AstrBot pipeline, so the new client must
+        still wait for ``_turn_finished`` before it can safely operate.
         """
         async with self._takeover_lock:
             old_ws = self._active_ws
 
-            if old_ws is not None and not old_ws.closed and old_ws is not new_ws:
-                # -- Existing connection: drain and hand off -----------------
+            # Step 1: set handoff pending (briefly hold dispatch lock)
+            async with self._dispatch_lock:
+                self._handoff_pending = True
 
-                # Step 1: set handoff pending (briefly hold dispatch lock)
-                async with self._dispatch_lock:
-                    self._handoff_pending = True
-
-                # Step 2: wait for active turn (NO lock held)
-                if not self._turn_finished.is_set():
-                    try:
-                        await new_ws.send_json({"type": "takeover_waiting"})
-                    except Exception:
-                        # Candidate died before we could notify
-                        async with self._dispatch_lock:
-                            self._handoff_pending = False
-                        return False
-
-                    await self._turn_finished.wait()
-
-                # Step 3: reacquire dispatch lock for final handoff
-                async with self._dispatch_lock:
-                    # Verify candidate is still alive
-                    if new_ws.closed:
+            # Step 2: wait for any active turn (NO lock held).
+            # Must happen regardless of old_ws state — a disconnected
+            # socket does not cancel the in-flight AstrBot pipeline.
+            if not self._turn_finished.is_set():
+                try:
+                    await new_ws.send_json({"type": "takeover_waiting"})
+                except Exception:
+                    # Candidate died before we could notify
+                    async with self._dispatch_lock:
                         self._handoff_pending = False
-                        return False
+                    return False
 
-                    # Notify and close old connection
+                await self._turn_finished.wait()
+
+            # Step 3: reacquire dispatch lock for final handoff
+            async with self._dispatch_lock:
+                # Verify candidate is still alive
+                if new_ws.closed:
+                    self._handoff_pending = False
+                    return False
+
+                # Notify and close old connection if still alive
+                if old_ws is not None and not old_ws.closed and old_ws is not new_ws:
                     try:
                         await old_ws.send_json({"type": "session_replaced"})
                     except Exception:
@@ -250,15 +254,9 @@ class FrontendAdapter(Platform):
                     except Exception:
                         pass
 
-                    # Install new client
-                    self._active_ws = new_ws
-                    self._handoff_pending = False
-            else:
-                # No existing connection or already closed — still acquire
-                # dispatch lock so any in-flight handler from a dropped
-                # socket finishes before we install the new client.
-                async with self._dispatch_lock:
-                    self._active_ws = new_ws
+                # Install new client
+                self._active_ws = new_ws
+                self._handoff_pending = False
 
             return True
 

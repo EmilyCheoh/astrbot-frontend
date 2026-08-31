@@ -77,6 +77,9 @@ function handleMessage(data) {
       } else if (data.code === "initialization_failed") {
         alert(data.message || "Failed to initialize Den.");
         stopReconnect();
+        state.isProcessing = false;
+        dom.chat.classList.add("hidden");
+        dom.login.classList.remove("hidden");
         dom.loginBtn.disabled = false;
         dom.loginBtn.textContent = "Login";
       } else if (data.code === "busy") {

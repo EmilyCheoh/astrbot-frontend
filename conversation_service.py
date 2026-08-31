@@ -190,6 +190,9 @@ class ConversationService:
         if not db_path:
             raise RuntimeError("Den conversation database not found")
 
+        if runtime.conversation_manager is None:
+            raise RuntimeError("AstrBot conversation manager is unavailable")
+
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         try:
             cursor = conn.execute(
@@ -205,10 +208,6 @@ class ConversationService:
             return None
 
         cid = row[0]
-
-        if runtime.conversation_manager is None:
-            raise RuntimeError("AstrBot conversation manager is unavailable")
-
         await runtime.conversation_manager.switch_conversation(
             self._umo, cid,
         )
