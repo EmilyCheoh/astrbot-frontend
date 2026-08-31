@@ -117,7 +117,9 @@ function handleMessage(data) {
     }
 
     case "history": {
+      state.isProcessing = false;
       state.isBranching = false;
+      dom.thinkingIndicator.classList.add("hidden");
       resetUserPatchState();
       state.currentConversationId = data.conversation_id || null;
       state.pendingConversationId = null;

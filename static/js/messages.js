@@ -385,6 +385,7 @@ export function finalizePendingBotRow() {
 // ---- Render full history ----
 
 export function renderHistory(messages) {
+  pendingBotRow = null;
   nextBranchIndex = 0;
   state.batchRendering = true;
   const finalAssistantIndices = findFinalAssistantIndices(messages);
