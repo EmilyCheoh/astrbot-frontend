@@ -44,9 +44,10 @@ class FrontendEvent(AstrMessageEvent):
     async def send(self, message: MessageChain):
         """Push the response back through the source WebSocket connection.
 
-        Does NOT emit ``status: idle`` automatically — the lifecycle
-        hooks in ``main.py`` determine the correct moment to finalise
-        the turn via :meth:`send_idle_once`.
+        Only delivers message segments — never emits ``status: idle``.
+        Turn finalisation is handled exclusively by
+        :meth:`cleanup_temporary_local_files` after the full pipeline
+        (including history save) has completed.
         """
         ws = self._source_ws
 
@@ -54,63 +55,50 @@ class FrontendEvent(AstrMessageEvent):
             segments = await chain_to_segments(message)
             await ws.send_json({"type": "message", "segments": segments})
 
-        # Always call super — lets AstrBot run post-send hooks
         await super().send(message)
-
-        # Direct send from a command/plugin that bypasses RespondStage
-        # entirely (no agent lifecycle, no pipeline result).  Send idle
-        # here because after_message_sent will never fire for these.
-        # When a pipeline result IS set, RespondStage may split the
-        # response into multiple send() calls (e.g. text + TTS audio),
-        # so we must wait for after_message_sent to finalise.
-        if (
-            self.get_extra("_den_agent_active") is None
-            and self.get_result() is None
-        ):
-            await self.send_idle_once()
 
     async def send_idle_once(self):
         """Send ``status: idle`` to the frontend at most once per event.
 
         Idempotent — safe to call multiple times; only the first call
-        actually transmits.  Stored state lives in event extras so it
-        is scoped to this single event, not to the adapter.
+        actually transmits.  The flag is set *before* the send attempt
+        so concurrent callers cannot slip through the guard.
         """
         if self.get_extra("_den_idle_sent"):
             return
 
-        ws = self._source_ws
-        if ws is not None and not ws.closed:
-            await ws.send_json({"type": "status", "status": "idle"})
-
         self.set_extra("_den_idle_sent", True)
+
+        ws = self._source_ws
+        if ws is None or ws.closed:
+            return
+
+        try:
+            await ws.send_json({"type": "status", "status": "idle"})
+        except Exception:
+            pass
 
     # -- Pipeline completion hook -------------------------------------------
 
     def cleanup_temporary_local_files(self) -> None:
-        """Override: clean temp files, then signal turn completion.
+        """Override: clean temp files, release turn, then notify frontend.
 
         Called by ``PipelineScheduler.execute()`` in its ``finally``
         block, AFTER ``_process_stages()`` has fully returned — meaning
         ``_save_to_history()`` has finished and the UMO session lock has
         been released.
 
-        Must remain synchronous (scheduler does not ``await`` it).
-        The async turn-finish work is dispatched via ``create_task``.
+        Turn release is synchronous so it succeeds even when the event
+        loop is shutting down.  The async idle notification follows as
+        a best-effort task.
         """
         try:
             super().cleanup_temporary_local_files()
         finally:
+            self._adapter.finish_turn(self._turn_token)
+
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(self._finish_den_turn())
+                loop.create_task(self.send_idle_once())
             except RuntimeError:
-                # Event loop closing — release adapter state synchronously
-                self._adapter.finish_turn(self._turn_token)
-
-    async def _finish_den_turn(self) -> None:
-        """Async cleanup: ensure idle is sent, then release the turn."""
-        try:
-            await self.send_idle_once()
-        finally:
-            self._adapter.finish_turn(self._turn_token)
+                pass

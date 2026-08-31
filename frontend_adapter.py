@@ -476,12 +476,12 @@ class FrontendAdapter(Platform):
                             logger.warning(f"Turn processing error ({kind}): {exc}")
                         finally:
                             if not committed:
+                                self.finish_turn(turn_token)
                                 try:
                                     if not ws.closed:
                                         await ws.send_json({"type": "status", "status": "idle"})
                                 except Exception:
                                     pass
-                                self.finish_turn(turn_token)
                         continue
 
                     # --- Non-turn operations (entirely under lock) -----
