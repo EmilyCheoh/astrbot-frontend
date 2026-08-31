@@ -74,6 +74,11 @@ function handleMessage(data) {
       } else if (data.code === "invalid_token") {
         alert(data.message || "Invalid token.");
         stopReconnect();
+      } else if (data.code === "initialization_failed") {
+        alert(data.message || "Failed to initialize Den.");
+        stopReconnect();
+        dom.loginBtn.disabled = false;
+        dom.loginBtn.textContent = "Login";
       } else if (data.code === "busy") {
         // Server rejected an action during an active reply — silent
       } else {

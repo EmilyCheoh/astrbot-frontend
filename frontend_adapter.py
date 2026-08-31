@@ -254,10 +254,89 @@ class FrontendAdapter(Platform):
                     self._active_ws = new_ws
                     self._handoff_pending = False
             else:
-                # No existing connection or already closed
-                self._active_ws = new_ws
+                # No existing connection or already closed — still acquire
+                # dispatch lock so any in-flight handler from a dropped
+                # socket finishes before we install the new client.
+                async with self._dispatch_lock:
+                    self._active_ws = new_ws
 
             return True
+
+    # -- Non-turn dispatch ---------------------------------------------------
+
+    async def _dispatch_non_turn(
+        self, ws: web.WebSocketResponse, kind: str, data: dict,
+    ) -> None:
+        """Dispatch a non-turn message.  MUST be called under ``_dispatch_lock``."""
+        if kind == "list_conversations":
+            cur = data.get("cursor")
+            limit = data.get("limit", 20)
+            gen = data.get("generation")
+            await self.conversations.send_conversations_list(
+                ws, cursor=cur, limit=limit, generation=gen,
+            )
+
+        elif kind == "switch_conversation":
+            cid = data.get("conversation_id")
+            if cid:
+                await self.conversations.handle_switch(ws, cid)
+
+        elif kind == "new_conversation":
+            await self.conversations.handle_new(ws)
+
+        elif kind == "branch_conversation":
+            await self.conversations.handle_branch(ws, data)
+
+        elif kind == "search_conversations":
+            await self.conversations.handle_search(ws, data)
+
+        elif kind == "view_history":
+            cid = data.get("conversation_id")
+            if cid:
+                await self.conversations.handle_view_history(ws, cid)
+
+        elif kind == "pin_conversation":
+            cid = data.get("conversation_id")
+            if cid:
+                await self.conversations.handle_pin(ws, cid)
+
+        elif kind == "unpin_conversation":
+            cid = data.get("conversation_id")
+            if cid:
+                await self.conversations.handle_unpin(ws, cid)
+
+        elif kind == "rename_conversation":
+            cid = data.get("conversation_id")
+            title = data.get("title", "")
+            pid = data.get("platform_id", "")
+            if cid and title is not None:
+                await self.conversations.handle_rename(ws, cid, title.strip(), pid)
+
+        elif kind == "delete_conversation":
+            cid = data.get("conversation_id")
+            pid = data.get("platform_id", "")
+            if cid:
+                await self.conversations.handle_delete(ws, cid, pid)
+
+        elif kind == "edit_assistant_message":
+            cid = data.get("conversation_id")
+            content = data.get("content", "").strip()
+            original = data.get("original_content", "")
+            if cid and content:
+                await self.messages.handle_edit_assistant_message(
+                    ws, cid, content, original,
+                )
+
+        elif kind == "prepare_user_message_patch":
+            cid = data.get("conversation_id")
+            display_content = data.get("display_content", "")
+            if cid and display_content:
+                await self.messages.handle_prepare_user_message_patch(
+                    ws, cid, display_content,
+                )
+
+        elif kind == "save_user_message_patch":
+            await self.messages.handle_save_user_message_patch(ws, data)
 
     # -- WebSocket handler ---------------------------------------------------
 
@@ -322,23 +401,36 @@ class FrontendAdapter(Platform):
         # -- Auth success -----------------------------------------------
         self.auth_guard.clear_failures()
 
-        # Execute single-client handoff
-        accepted = await self._handle_takeover(ws)
-        if not accepted:
-            # Candidate ws died during handoff wait
-            return ws
-
-        # Align AstrBot's CID pointer with the latest Den conversation,
-        # then send initial data.  CID alignment MUST precede auth_ok
-        # so any immediately-sent message targets the correct conversation.
-        cid = await self.conversations.align_cid()
-        await ws.send_json({"type": "auth_ok"})
-        await self.conversations.send_history(ws, conversation_id=cid)
-        await self.conversations.send_favorites(ws)
-        logger.info("Web frontend client authenticated.")
-
-        # -- Authenticated message loop ---------------------------------
+        accepted = False
         try:
+            # Execute single-client handoff
+            accepted = await self._handle_takeover(ws)
+            if not accepted:
+                # Candidate ws died during handoff wait
+                return ws
+
+            # Strict CID alignment — infrastructure failures abort the
+            # session so the client never operates against a stale pointer.
+            try:
+                cid = await self.conversations.align_cid()
+            except Exception as exc:
+                logger.warning(f"CID alignment failed during auth: {exc}")
+                try:
+                    await ws.send_json({
+                        "type": "error",
+                        "code": "initialization_failed",
+                        "message": "Failed to initialize the Den conversation.",
+                    })
+                except Exception:
+                    pass
+                return ws
+
+            await ws.send_json({"type": "auth_ok"})
+            await self.conversations.send_history(ws, conversation_id=cid)
+            await self.conversations.send_favorites(ws)
+            logger.info("Web frontend client authenticated.")
+
+            # -- Authenticated message loop -----------------------------
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     try:
@@ -356,35 +448,20 @@ class FrontendAdapter(Platform):
                             pass
                         continue
 
-                    # --- Ownership and state gate ----------------------
-                    turn_token = None
-                    skip = False
-
-                    async with self._dispatch_lock:
-                        if ws is not self._active_ws:
-                            skip = True
-                        elif self._handoff_pending:
-                            skip = True
-                        elif kind in _TURN_KINDS:
+                    # --- Turn-starting operations ----------------------
+                    # Acquire token under lock, then execute pipeline
+                    # outside so takeover can enter draining state.
+                    if kind in _TURN_KINDS:
+                        turn_token = None
+                        async with self._dispatch_lock:
+                            if ws is not self._active_ws:
+                                continue
+                            if self._handoff_pending:
+                                continue
                             turn_token = self._acquire_turn(ws)
                             if turn_token is None:
-                                skip = True
-                        elif kind in _FROZEN_KINDS and self._turn_token is not None:
-                            try:
-                                await ws.send_json({
-                                    "type": "error",
-                                    "code": "busy",
-                                    "message": "Please wait for the current reply to finish.",
-                                })
-                            except Exception:
-                                pass
-                            skip = True
+                                continue
 
-                    if skip:
-                        continue
-
-                    # --- Turn-starting operations ----------------------
-                    if kind in _TURN_KINDS:
                         committed = False
                         try:
                             if kind == "message":
@@ -409,79 +486,27 @@ class FrontendAdapter(Platform):
                                 self.finish_turn(turn_token)
                         continue
 
-                    # --- Conversation management -----------------------
-                    if kind == "list_conversations":
-                        cur = data.get("cursor")
-                        limit = data.get("limit", 20)
-                        gen = data.get("generation")
-                        await self.conversations.send_conversations_list(
-                            ws, cursor=cur, limit=limit, generation=gen,
-                        )
+                    # --- Non-turn operations (entirely under lock) -----
+                    # Handler executes inside _dispatch_lock so takeover
+                    # cannot slip between the ownership check and the
+                    # actual CID-mutating operation.
+                    async with self._dispatch_lock:
+                        if ws is not self._active_ws:
+                            continue
+                        if self._handoff_pending:
+                            continue
+                        if kind in _FROZEN_KINDS and self._turn_token is not None:
+                            try:
+                                await ws.send_json({
+                                    "type": "error",
+                                    "code": "busy",
+                                    "message": "Please wait for the current reply to finish.",
+                                })
+                            except Exception:
+                                pass
+                            continue
 
-                    elif kind == "switch_conversation":
-                        cid = data.get("conversation_id")
-                        if cid:
-                            await self.conversations.handle_switch(ws, cid)
-
-                    elif kind == "new_conversation":
-                        await self.conversations.handle_new(ws)
-
-                    elif kind == "branch_conversation":
-                        await self.conversations.handle_branch(ws, data)
-
-                    elif kind == "search_conversations":
-                        await self.conversations.handle_search(ws, data)
-
-                    elif kind == "view_history":
-                        cid = data.get("conversation_id")
-                        if cid:
-                            await self.conversations.handle_view_history(ws, cid)
-
-                    elif kind == "pin_conversation":
-                        cid = data.get("conversation_id")
-                        if cid:
-                            await self.conversations.handle_pin(ws, cid)
-
-                    elif kind == "unpin_conversation":
-                        cid = data.get("conversation_id")
-                        if cid:
-                            await self.conversations.handle_unpin(ws, cid)
-
-                    # --- Rename / Delete -------------------------------
-                    elif kind == "rename_conversation":
-                        cid = data.get("conversation_id")
-                        title = data.get("title", "")
-                        pid = data.get("platform_id", "")
-                        if cid and title is not None:
-                            await self.conversations.handle_rename(ws, cid, title.strip(), pid)
-
-                    elif kind == "delete_conversation":
-                        cid = data.get("conversation_id")
-                        pid = data.get("platform_id", "")
-                        if cid:
-                            await self.conversations.handle_delete(ws, cid, pid)
-
-                    # --- Edit / Retry ----------------------------------
-                    elif kind == "edit_assistant_message":
-                        cid = data.get("conversation_id")
-                        content = data.get("content", "").strip()
-                        original = data.get("original_content", "")
-                        if cid and content:
-                            await self.messages.handle_edit_assistant_message(
-                                ws, cid, content, original,
-                            )
-
-                    # --- User message patch (no LLM re-fire) -------
-                    elif kind == "prepare_user_message_patch":
-                        cid = data.get("conversation_id")
-                        display_content = data.get("display_content", "")
-                        if cid and display_content:
-                            await self.messages.handle_prepare_user_message_patch(
-                                ws, cid, display_content,
-                            )
-
-                    elif kind == "save_user_message_patch":
-                        await self.messages.handle_save_user_message_patch(ws, data)
+                        await self._dispatch_non_turn(ws, kind, data)
 
                 elif msg.type in (
                     aiohttp.WSMsgType.ERROR,
@@ -489,7 +514,7 @@ class FrontendAdapter(Platform):
                 ):
                     break
         finally:
-            if self._active_ws is ws:
+            if accepted and self._active_ws is ws:
                 self._active_ws = None
             logger.info("Web frontend client disconnected.")
 

@@ -88,6 +88,8 @@ function doSearch() {
 // ---- Navigation handler ----
 
 function openSearchResult(r) {
+  if (state.isProcessing) return;
+
   state.currentConvTitle = r.preview || "conversation";
   state.conversationById.set(r.id, r);
   state.pendingConversationId = r.id;
