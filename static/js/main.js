@@ -198,6 +198,7 @@ function handleMessage(data) {
       state.pendingConversationId = null;
       state.activeAnchorId = null;
       state.currentMessages = [];
+      state.currentConvTitle = "conversation";
       state.isReadonly = false;
       dom.messages.innerHTML = "";
       setComposerReadonly(false);

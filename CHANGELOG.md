@@ -1,3 +1,7 @@
+标题跟着新窗口一起重置
+
+---
+
 删除 Markdown 导出功能（export.js → header_menu.js，仅保留菜单、Star、Delete）
 
 ---
