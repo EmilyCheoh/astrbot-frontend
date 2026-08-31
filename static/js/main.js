@@ -26,7 +26,7 @@ import {
   updateConversation, removeConversation, renderSidebar,
 } from "./conversations.js";
 import { renderSearchResults, closeSearch, initSearch } from "./search.js";
-import { initExport } from "./export.js";
+import { initHeaderMenu } from "./header_menu.js";
 
 // ---- Message dispatch (called by socket.js on every WS message) ----
 
@@ -324,5 +324,5 @@ document.addEventListener("keydown", (e) => {
 initComposer();
 initConversations();
 initSearch();
-initExport();
+initHeaderMenu();
 initScrollButton();

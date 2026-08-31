@@ -1,3 +1,7 @@
+删除 Markdown 导出功能（export.js → header_menu.js，仅保留菜单、Star、Delete）
+
+---
+
 修改idle发送顺序
 
 ---

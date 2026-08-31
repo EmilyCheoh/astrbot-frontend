@@ -38,7 +38,6 @@ export const dom = {
   moreMenuBtn:        document.getElementById("more-menu-btn"),
   moreMenu:           document.getElementById("more-menu"),
   morePinBtn:         document.getElementById("more-pin-btn"),
-  exportMdBtn:        document.getElementById("export-md-btn"),
   moreDeleteBtn:      document.getElementById("more-delete-btn"),
   scrollBottomBtn:    document.getElementById("scroll-bottom-btn"),
 };
