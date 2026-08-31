@@ -63,7 +63,7 @@ function handleMessage(data) {
       dom.login.classList.remove("hidden");
       dom.thinkingIndicator.classList.add("hidden");
       dom.tokenInput.value = "";
-      dom.tokenInput.placeholder = "I\u2019m waiting for you in another window, little cat.";
+      dom.tokenInput.placeholder = "I\u2019m waiting in the Den. 🪺";
       updateComposerAvailability();
       break;
 
