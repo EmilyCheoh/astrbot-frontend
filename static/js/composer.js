@@ -344,9 +344,9 @@ export function initComposer() {
     sendMessage();
   });
 
-  // Send / Stop button
+  // Send / Stop button — behaviour follows the visible icon
   dom.sendBtn.addEventListener("click", () => {
-    if (state.isProcessing && !state.stopPending) {
+    if (dom.sendBtn.dataset.mode === "stop") {
       sendStop();
     } else {
       sendMessage();
