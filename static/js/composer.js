@@ -28,7 +28,8 @@ export function updateComposerAvailability() {
     state.stopPending;
 
   // Toggle send arrow / stop square based on processing state
-  const mode = state.isProcessing ? "stop" : "send";
+  // After stop_ack, show arrow even while old tasks drain their idles
+  const mode = state.isProcessing && !state.stopAcknowledged ? "stop" : "send";
   if (dom.sendBtn.dataset.mode !== mode) {
     dom.sendBtn.dataset.mode = mode;
     dom.sendBtn.title = mode === "stop" ? "Stop" : "Send";
@@ -223,6 +224,7 @@ export function sendMessage() {
 
   const hasAttachment = images.length > 0 || files.length > 0;
 
+  state.stopAcknowledged = false;
   send(payload);
   appendUser(text, { images, files, hasAttachment });
   dom.msgInput.value = "";

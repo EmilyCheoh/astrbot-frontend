@@ -45,6 +45,7 @@ function handleMessage(data) {
       state.activeAnchorId = null;
       state.isBranching = false;
       state.stopPending = false;
+      state.stopAcknowledged = false;
       state.activeMessageIds.clear();
       break;
 
@@ -60,6 +61,7 @@ function handleMessage(data) {
       stopReconnect();
       state.isProcessing = false;
       state.stopPending = false;
+      state.stopAcknowledged = false;
       state.activeMessageIds.clear();
       state.isBranching = false;
       state.pendingConversationId = null;
@@ -122,10 +124,16 @@ function handleMessage(data) {
       break;
 
     case "stop_ack":
+      // Stop confirmed — clear pending and show arrow while old
+      // tasks drain their idles.
+      state.stopPending = false;
+      state.stopAcknowledged = true;
+      updateComposerAvailability();
+      break;
+
     case "stop_failed":
-      // Only clear the stop-pending flag so the button re-enables.
-      // isProcessing, thinking indicator, and bot rows are handled
-      // by each task's own idle signal.
+      // Stop could not be submitted — re-enable the square so it
+      // can be clicked again; do NOT switch to arrow.
       state.stopPending = false;
       updateComposerAvailability();
       break;
