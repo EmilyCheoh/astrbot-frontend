@@ -122,11 +122,11 @@ function handleMessage(data) {
       break;
 
     case "stop_ack":
+    case "stop_failed":
+      // Only clear the stop-pending flag so the button re-enables.
+      // isProcessing, thinking indicator, and bot rows are handled
+      // by each task's own idle signal.
       state.stopPending = false;
-      state.activeMessageIds.clear();
-      state.isProcessing = false;
-      dom.thinkingIndicator.classList.add("hidden");
-      finalizePendingBotRow();
       updateComposerAvailability();
       break;
 

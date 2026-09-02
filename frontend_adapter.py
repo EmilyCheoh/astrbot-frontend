@@ -488,11 +488,11 @@ class FrontendAdapter(Platform):
                             await self.messages.on_stop(ws, stop_id)
                         except Exception as exc:
                             logger.warning(f"Stop processing error: {exc}")
-                            # Recover the button even if event creation failed
+                            # Re-enable the button without pretending stop succeeded
                             try:
                                 if not ws.closed:
                                     await ws.send_json({
-                                        "type": "stop_ack", "id": stop_id,
+                                        "type": "stop_failed", "id": stop_id,
                                     })
                             except Exception:
                                 pass
