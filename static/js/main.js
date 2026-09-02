@@ -44,6 +44,8 @@ function handleMessage(data) {
       state.pendingConversationId = null;
       state.activeAnchorId = null;
       state.isBranching = false;
+      state.stopPending = false;
+      state.activeMessageIds.clear();
       break;
 
     case "takeover_waiting":
@@ -57,6 +59,8 @@ function handleMessage(data) {
       // Another device/tab took over — return to login, stop reconnecting.
       stopReconnect();
       state.isProcessing = false;
+      state.stopPending = false;
+      state.activeMessageIds.clear();
       state.isBranching = false;
       state.pendingConversationId = null;
       dom.chat.classList.add("hidden");
@@ -94,14 +98,35 @@ function handleMessage(data) {
 
     case "status":
       if (data.status === "thinking") {
+        if (data.id) state.activeMessageIds.add(data.id);
         state.isProcessing = true;
         dom.thinkingIndicator.classList.remove("hidden");
         scrollToBottom();
       } else {
         finalizePendingBotRow();
-        state.isProcessing = false;
-        dom.thinkingIndicator.classList.add("hidden");
+        if (data.id) {
+          state.activeMessageIds.delete(data.id);
+          if (state.activeMessageIds.size === 0) {
+            state.isProcessing = false;
+          }
+        } else {
+          // Legacy idle without ID (retry/edit failure path) — clear all
+          state.activeMessageIds.clear();
+          state.isProcessing = false;
+        }
+        if (!state.isProcessing) {
+          dom.thinkingIndicator.classList.add("hidden");
+        }
       }
+      updateComposerAvailability();
+      break;
+
+    case "stop_ack":
+      state.stopPending = false;
+      state.activeMessageIds.clear();
+      state.isProcessing = false;
+      dom.thinkingIndicator.classList.add("hidden");
+      finalizePendingBotRow();
       updateComposerAvailability();
       break;
 

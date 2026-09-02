@@ -30,7 +30,7 @@ from .message_service import MessageService
 
 
 # -- Message kinds that start a new pipeline turn ----------------------------
-_TURN_KINDS = frozenset({"message", "retry", "edit_message"})
+_TURN_KINDS = frozenset({"retry", "edit_message"})
 
 # -- Message kinds frozen while a turn is active -----------------------------
 _FROZEN_KINDS = frozenset({
@@ -446,6 +446,58 @@ class FrontendAdapter(Platform):
                             pass
                         continue
 
+                    # --- Message (no turn lease) -----------------------
+                    # Submitted directly to AstrBot; concurrent sends OK.
+                    if kind == "message":
+                        async with self._dispatch_lock:
+                            if ws is not self._active_ws:
+                                continue
+                            if self._handoff_pending:
+                                continue
+                        msg_id = data.get("id", "")
+                        committed = False
+                        try:
+                            committed = await self.messages.on_message(
+                                data, ws, turn_token=None,
+                            )
+                        except Exception as exc:
+                            logger.warning(f"Message processing error: {exc}")
+                        finally:
+                            if not committed:
+                                try:
+                                    if not ws.closed:
+                                        await ws.send_json({
+                                            "type": "status",
+                                            "status": "idle",
+                                            "id": msg_id,
+                                        })
+                                except Exception:
+                                    pass
+                        continue
+
+                    # --- Stop (no turn lease) --------------------------
+                    # Fixed /stop event; result swallowed by FrontendEvent.
+                    if kind == "stop":
+                        async with self._dispatch_lock:
+                            if ws is not self._active_ws:
+                                continue
+                            if self._handoff_pending:
+                                continue
+                        stop_id = data.get("id", "")
+                        try:
+                            await self.messages.on_stop(ws, stop_id)
+                        except Exception as exc:
+                            logger.warning(f"Stop processing error: {exc}")
+                            # Recover the button even if event creation failed
+                            try:
+                                if not ws.closed:
+                                    await ws.send_json({
+                                        "type": "stop_ack", "id": stop_id,
+                                    })
+                            except Exception:
+                                pass
+                        continue
+
                     # --- Turn-starting operations ----------------------
                     # Acquire token under lock, then execute pipeline
                     # outside so takeover can enter draining state.
@@ -462,16 +514,11 @@ class FrontendAdapter(Platform):
 
                         committed = False
                         try:
-                            if kind == "message":
-                                committed = await self.messages.on_message(
-                                    data, ws, turn_token,
-                                )
-                            else:
-                                committed = await self.messages.handle_retry_or_edit(
-                                    ws, data.get("content", ""),
-                                    action="retry" if kind == "retry" else "edit",
-                                    turn_token=turn_token,
-                                )
+                            committed = await self.messages.handle_retry_or_edit(
+                                ws, data.get("content", ""),
+                                action="retry" if kind == "retry" else "edit",
+                                turn_token=turn_token,
+                            )
                         except Exception as exc:
                             logger.warning(f"Turn processing error ({kind}): {exc}")
                         finally:

@@ -61,7 +61,7 @@ class MessageService:
         await ws.send_json({"type": "message_ack", "id": msg_id})
 
         # Notify frontend that processing has started
-        await ws.send_json({"type": "status", "status": "thinking"})
+        await ws.send_json({"type": "status", "status": "thinking", "id": msg_id})
 
         # ---- Build message chain -------------------------------------------
         chain: list = []
@@ -143,6 +143,42 @@ class MessageService:
 
         self._adapter.commit_event(event)
         return True
+
+    # -- Stop ----------------------------------------------------------------
+
+    async def on_stop(
+        self, ws: web.WebSocketResponse, stop_id: str,
+    ) -> None:
+        """Create a fixed ``/stop`` event and commit it to AstrBot.
+
+        Does NOT send ``status: thinking`` — the stop button state is
+        managed entirely by the ``stop_ack`` round-trip.
+        """
+        abm = AstrBotMessage()
+        abm.type = MessageType.FRIEND_MESSAGE
+        abm.group_id = ""
+        abm.message_str = "/stop"
+        abm.sender = MessageMember(
+            user_id="felis_abyssalis", nickname="Felis Abyssalis",
+        )
+        abm.message = [Plain(text="/stop")]
+        abm.raw_message = {"type": "stop", "id": stop_id}
+        abm.self_id = "abyss_web"
+        abm.session_id = "felis_abyssalis"
+        abm.message_id = stop_id
+
+        event = FrontendEvent(
+            message_str="/stop",
+            message_obj=abm,
+            platform_meta=self._adapter.meta(),
+            session_id=abm.session_id,
+            adapter=self._adapter,
+            source_ws=ws,
+            turn_token=None,
+            is_stop=True,
+        )
+
+        self._adapter.commit_event(event)
 
     # -- Retry / Edit --------------------------------------------------------
 

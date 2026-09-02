@@ -35,21 +35,39 @@ class FrontendEvent(AstrMessageEvent):
         adapter: "FrontendAdapter",
         source_ws: "web.WebSocketResponse",
         turn_token: object,
+        is_stop: bool = False,
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self._adapter = adapter
         self._source_ws = source_ws
         self._turn_token = turn_token
+        self._is_stop = is_stop
 
     async def send(self, message: MessageChain):
         """Push the response back through the source WebSocket connection.
 
-        Only delivers message segments — never emits ``status: idle``.
-        Turn finalisation is handled exclusively by
-        :meth:`cleanup_temporary_local_files` after the full pipeline
-        (including history save) has completed.
+        For stop events the AstrBot result text is swallowed and a single
+        ``stop_ack`` is sent instead.  Normal events deliver message
+        segments as before.  Neither path emits ``status: idle`` — turn
+        finalisation is handled exclusively by
+        :meth:`cleanup_temporary_local_files`.
         """
         ws = self._source_ws
+
+        if self._is_stop:
+            # Swallow the stop handler's result; send stop_ack once
+            if not self.get_extra("_den_stop_ack_sent"):
+                self.set_extra("_den_stop_ack_sent", True)
+                if ws is not None and not ws.closed:
+                    try:
+                        stop_id = self.message_obj.message_id
+                        await ws.send_json({
+                            "type": "stop_ack", "id": stop_id,
+                        })
+                    except Exception:
+                        pass
+            await super().send(message)
+            return
 
         if ws is not None and not ws.closed:
             segments = await chain_to_segments(message)
@@ -74,7 +92,10 @@ class FrontendEvent(AstrMessageEvent):
             return
 
         try:
-            await ws.send_json({"type": "status", "status": "idle"})
+            payload = {"type": "status", "status": "idle"}
+            if self.message_obj and self.message_obj.message_id:
+                payload["id"] = self.message_obj.message_id
+            await ws.send_json(payload)
         except Exception:
             pass
 
@@ -97,8 +118,10 @@ class FrontendEvent(AstrMessageEvent):
         finally:
             self._adapter.finish_turn(self._turn_token)
 
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.send_idle_once())
-            except RuntimeError:
-                pass
+            # Stop events already sent stop_ack — no idle needed
+            if not self._is_stop:
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self.send_idle_once())
+                except RuntimeError:
+                    pass

@@ -203,3 +203,8 @@
 }
 
 .send-btn:hover { opacity: 0.8; }
+
+/* Stop icon hidden by default; shown when processing */
+.send-btn .stop-icon { display: none; }
+.send-btn[data-mode="stop"] .send-icon { display: none; }
+.send-btn[data-mode="stop"] .stop-icon { display: block; }

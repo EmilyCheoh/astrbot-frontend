@@ -24,8 +24,15 @@ const PREVIEWABLE_IMAGE_TYPES = new Set([
 export function updateComposerAvailability() {
   dom.sendBtn.disabled =
     state.pendingReads > 0 ||
-    state.isProcessing ||
-    state.isReadonly;
+    state.isReadonly ||
+    state.stopPending;
+
+  // Toggle send arrow / stop square based on processing state
+  const mode = state.isProcessing ? "stop" : "send";
+  if (dom.sendBtn.dataset.mode !== mode) {
+    dom.sendBtn.dataset.mode = mode;
+    dom.sendBtn.title = mode === "stop" ? "Stop" : "Send";
+  }
 }
 
 // ---- Size formatting ----
@@ -202,7 +209,7 @@ function clearPending() {
 // ---- Send message ----
 
 export function sendMessage() {
-  if (state.isReadonly || state.isProcessing || state.pendingReads > 0) return;
+  if (state.isReadonly || state.stopPending || state.pendingReads > 0) return;
   const text = dom.msgInput.value.trim();
   const images = state.pendingImages.slice();
   const files = state.pendingFiles.slice();
@@ -216,17 +223,21 @@ export function sendMessage() {
 
   const hasAttachment = images.length > 0 || files.length > 0;
 
-  // Lock composer immediately — do not wait for server's "thinking" status.
-  // Closes the window where a fast user could switch conversations or
-  // double-submit before the server acknowledges.
-  state.isProcessing = true;
-  updateComposerAvailability();
-
   send(payload);
   appendUser(text, { images, files, hasAttachment });
   dom.msgInput.value = "";
   dom.msgInput.style.height = "auto";
   clearPending();
+}
+
+// ---- Stop generation ----
+
+function sendStop() {
+  if (!isConnected() || state.stopPending) return;
+  const id = crypto.randomUUID();
+  state.stopPending = true;
+  updateComposerAvailability();
+  send({ type: "stop", id });
 }
 
 // ---- Draft replacement (used by branch) ----
@@ -326,9 +337,17 @@ export function initComposer() {
     if (isMobile || e.shiftKey) return;
 
     e.preventDefault();
+
+    // During stop window, Enter is blocked (stopPending checked in sendMessage)
     sendMessage();
   });
 
-  // Send button
-  dom.sendBtn.addEventListener("click", sendMessage);
+  // Send / Stop button
+  dom.sendBtn.addEventListener("click", () => {
+    if (state.isProcessing && !state.stopPending) {
+      sendStop();
+    } else {
+      sendMessage();
+    }
+  });
 }
