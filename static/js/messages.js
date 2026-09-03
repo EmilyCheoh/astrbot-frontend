@@ -153,9 +153,13 @@ export function updateLastActions() {
 // ---- Append user message ----
 
 export function appendUser(text, { images = [], files = [], hasAttachment = false } = {}) {
-  pendingBotRow = null;  // New user turn — reset accumulator
-
   const isCommand = !!(text && text.trimStart().startsWith("/"));
+
+  // Only reset the accumulator for real user messages — commands
+  // must not break an in-flight bot row (CoT + tool calls + reply).
+  if (!isCommand) {
+    pendingBotRow = null;
+  }
 
   const wrapper = document.createElement("div");
   wrapper.className = "msg-row msg-row-user" + (isCommand ? " msg-row-command" : "");
