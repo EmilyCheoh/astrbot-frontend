@@ -176,6 +176,27 @@
 
 
 /* ================================================================
+   Command & system messages
+   ================================================================ */
+
+/* Slash-command user bubbles: same bubble, monospace + muted color */
+.msg-row-command .msg-user {
+  font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+  color: var(--text-supporting);
+}
+
+/* System/plugin replies: monospace + muted color, no font preference */
+.msg-system {
+  font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace !important;
+  color: var(--text-supporting);
+}
+
+.msg-system .msg-bot-text {
+  color: var(--text-supporting);
+}
+
+
+/* ================================================================
    Message rows & action bars
    ================================================================ */
 

@@ -60,12 +60,16 @@ class MessageService:
         msg_id = data.get("id", str(uuid.uuid4()))
         await ws.send_json({"type": "message_ack", "id": msg_id})
 
-        # Notify frontend that processing has started
-        await ws.send_json({"type": "status", "status": "thinking", "id": msg_id})
+        # Detect slash commands — they skip the thinking/idle lifecycle
+        content = data.get("content", "").strip()
+        is_command = content.startswith("/")
+
+        # Notify frontend that processing has started (not for commands)
+        if not is_command:
+            await ws.send_json({"type": "status", "status": "thinking", "id": msg_id})
 
         # ---- Build message chain -------------------------------------------
         chain: list = []
-        content = data.get("content", "").strip()
         if content:
             chain.append(Plain(text=content))
 
@@ -135,6 +139,7 @@ class MessageService:
             adapter=self._adapter,
             source_ws=ws,
             turn_token=turn_token,
+            is_command=is_command,
         )
 
         # Register temp files so AstrBot cleans them up

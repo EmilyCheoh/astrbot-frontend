@@ -26,6 +26,11 @@ if TYPE_CHECKING:
 class FrontendEvent(AstrMessageEvent):
     """Message event bound to a specific WebSocket connection and turn token."""
 
+    # MessageChain.type values that indicate assistant reply structure
+    _ASSISTANT_CHAIN_TYPES = frozenset({
+        "reasoning", "tool_call", "tool_direct_result",
+    })
+
     def __init__(
         self,
         message_str: str,
@@ -36,20 +41,47 @@ class FrontendEvent(AstrMessageEvent):
         source_ws: "web.WebSocketResponse",
         turn_token: object,
         is_stop: bool = False,
+        is_command: bool = False,
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self._adapter = adapter
         self._source_ws = source_ws
         self._turn_token = turn_token
         self._is_stop = is_stop
+        self._is_command = is_command
+
+    def _classify_source(
+        self, segments: list[dict], message: MessageChain,
+    ) -> str:
+        """Determine whether this send belongs to the LLM or the system.
+
+        Priority:
+        1. Segments contain reasoning/tool_call → ``"llm"``
+        2. MessageChain.type is a known assistant structure → ``"llm"``
+        3. Event result is LLM_RESULT → ``"llm"``
+        4. Everything else → ``"system"``
+        """
+        if any(s.get("type") in ("reasoning", "tool_call") for s in segments):
+            return "llm"
+
+        chain_type = getattr(message, "type", None)
+        if chain_type and chain_type in self._ASSISTANT_CHAIN_TYPES:
+            return "llm"
+
+        result = self.get_result()
+        if result and hasattr(result, "is_llm_result") and result.is_llm_result():
+            return "llm"
+
+        return "system"
 
     async def send(self, message: MessageChain):
         """Push the response back through the source WebSocket connection.
 
         For stop events the AstrBot result text is swallowed and a single
         ``stop_ack`` is sent instead.  Normal events deliver message
-        segments as before.  Neither path emits ``status: idle`` — turn
-        finalisation is handled exclusively by
+        segments with a ``source`` field so the frontend can distinguish
+        LLM replies from system/plugin output.  Neither path emits
+        ``status: idle`` — turn finalisation is handled exclusively by
         :meth:`cleanup_temporary_local_files`.
         """
         ws = self._source_ws
@@ -71,7 +103,13 @@ class FrontendEvent(AstrMessageEvent):
 
         if ws is not None and not ws.closed:
             segments = await chain_to_segments(message)
-            await ws.send_json({"type": "message", "segments": segments})
+            if segments:
+                source = self._classify_source(segments, message)
+                await ws.send_json({
+                    "type": "message",
+                    "source": source,
+                    "segments": segments,
+                })
 
         await super().send(message)
 
@@ -118,8 +156,9 @@ class FrontendEvent(AstrMessageEvent):
         finally:
             self._adapter.finish_turn(self._turn_token)
 
-            # Stop events already sent stop_ack — no idle needed
-            if not self._is_stop:
+            # Stop events sent stop_ack; command events never entered
+            # the thinking lifecycle — neither needs idle.
+            if not self._is_stop and not self._is_command:
                 try:
                     loop = asyncio.get_running_loop()
                     loop.create_task(self.send_idle_once())

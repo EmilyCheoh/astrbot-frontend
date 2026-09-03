@@ -10,8 +10,8 @@ import { dom } from "./dom.js";
 import { connectWS, send, stopReconnect } from "./socket.js";
 import { cycleTheme, cycleFont } from "./preferences.js";
 import {
-  appendBot, finalizePendingBotRow, renderHistory, scrollToBottom,
-  setComposerReadonly, updateLastActions, initScrollButton,
+  appendBot, appendSystem, finalizePendingBotRow, renderHistory,
+  scrollToBottom, setComposerReadonly, updateLastActions, initScrollButton,
   handleAssistantEditSuccess, handleAssistantEditFailure,
   handleUserPatchReady, handleUserPatchSuccess, handleUserPatchFailure,
   resetUserPatchState,
@@ -141,10 +141,21 @@ function handleMessage(data) {
     case "message": {
       const segs = data.segments || [];
       if (segs.length > 0) {
-        // During a processing cycle (status: thinking was received),
-        // let status: idle handle finalization.  Standalone pushes
-        // (isProcessing is false) finalize immediately.
-        appendBot(segs, { complete: !state.isProcessing });
+        // Guard: structured segments (CoT / tool calls) always go
+        // through appendBot regardless of the source field — this
+        // protects the existing UI even if the backend mis-labels.
+        const hasAssistantStructure = segs.some(
+          s => s.type === "reasoning" || s.type === "tool_call"
+        );
+
+        if (hasAssistantStructure || data.source !== "system") {
+          // During a processing cycle (status: thinking was received),
+          // let status: idle handle finalization.  Standalone pushes
+          // (isProcessing is false) finalize immediately.
+          appendBot(segs, { complete: !state.isProcessing });
+        } else {
+          appendSystem(segs);
+        }
       }
       break;
     }

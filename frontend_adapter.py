@@ -144,11 +144,26 @@ class FrontendAdapter(Platform):
 
         Always routes to the current ``_active_ws``, NOT to any specific
         source socket.  This preserves existing push behaviour.
+
+        Includes a ``source`` field so the frontend can distinguish
+        LLM structure (CoT / tool calls forwarded via push) from
+        plain system/plugin output.
         """
         ws = self._active_ws
         if ws is not None and not ws.closed:
             segments = await chain_to_segments(message_chain)
-            await ws.send_json({"type": "message", "segments": segments})
+            if segments:
+                # Same priority as FrontendEvent: structured segments → llm
+                has_assistant_structure = any(
+                    s.get("type") in ("reasoning", "tool_call")
+                    for s in segments
+                )
+                source = "llm" if has_assistant_structure else "system"
+                await ws.send_json({
+                    "type": "message",
+                    "source": source,
+                    "segments": segments,
+                })
         await super().send_by_session(session, message_chain)
 
     # -- Index handler -------------------------------------------------------

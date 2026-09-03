@@ -585,7 +585,9 @@ class ConversationService:
                 # New user message — close previous turn
                 finish_turn(raw_index - 1)
                 display_text = cls._extract_branch_text(message)
-                if display_text:
+                # Skip slash commands — they don't get branch indices
+                # on the frontend, so the backend must not count them
+                if display_text and not display_text.lstrip().startswith("/"):
                     points.append({
                         "role": "user",
                         "cut_index": raw_index,

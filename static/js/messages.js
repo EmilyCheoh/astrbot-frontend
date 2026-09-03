@@ -143,8 +143,9 @@ export function updateLastActions() {
   dom.messages.querySelectorAll(".msg-row-user.is-last, .msg-row-bot.is-last")
     .forEach((el) => el.classList.remove("is-last"));
   if (state.isReadonly) return;
-  const users = dom.messages.querySelectorAll(".msg-row-user");
-  const bots = dom.messages.querySelectorAll(".msg-row-bot");
+  // Exclude command and system rows — they have no action bars
+  const users = dom.messages.querySelectorAll(".msg-row-user:not(.msg-row-command)");
+  const bots = dom.messages.querySelectorAll(".msg-row-bot:not(.msg-row-system)");
   if (users.length) users[users.length - 1].classList.add("is-last");
   if (bots.length) bots[bots.length - 1].classList.add("is-last");
 }
@@ -154,8 +155,10 @@ export function updateLastActions() {
 export function appendUser(text, { images = [], files = [], hasAttachment = false } = {}) {
   pendingBotRow = null;  // New user turn — reset accumulator
 
+  const isCommand = !!(text && text.trimStart().startsWith("/"));
+
   const wrapper = document.createElement("div");
-  wrapper.className = "msg-row msg-row-user";
+  wrapper.className = "msg-row msg-row-user" + (isCommand ? " msg-row-command" : "");
   wrapper.dataset.text = text;
   if (hasAttachment) wrapper.dataset.hasAttachment = "true";
 
@@ -194,25 +197,30 @@ export function appendUser(text, { images = [], files = [], hasAttachment = fals
     div.appendChild(strip);
   }
 
-  // Branch index for user messages with text
-  if (text) {
-    assignBranchIndex(wrapper);
+  // Commands: no branch index, no action bar
+  if (!isCommand) {
+    // Branch index for user messages with text
+    if (text) {
+      assignBranchIndex(wrapper);
+    }
+
+    // Action bar — skip Edit for attachment messages, skip Copy if no text
+    const actionList = [];
+    if (!hasAttachment) {
+      actionList.push({ icon: ICON_EDIT, title: "Edit", onClick: () => handleEditClick(wrapper), className: "edit-btn" });
+      actionList.push({ icon: ICON_PATCH, title: "Correct without reply", onClick: () => handleUserPatchClick(wrapper), className: "patch-btn" });
+    }
+    if (text) {
+      actionList.push({ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(wrapper, "user"), className: "branch-btn" });
+      actionList.push({ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(wrapper.dataset.text || "", e.currentTarget) });
+    }
+    const actions = createActionBar(actionList);
+    wrapper.appendChild(div);
+    wrapper.appendChild(actions);
+  } else {
+    wrapper.appendChild(div);
   }
 
-  // Action bar — skip Edit for attachment messages, skip Copy if no text
-  const actionList = [];
-  if (!hasAttachment) {
-    actionList.push({ icon: ICON_EDIT, title: "Edit", onClick: () => handleEditClick(wrapper), className: "edit-btn" });
-    actionList.push({ icon: ICON_PATCH, title: "Correct without reply", onClick: () => handleUserPatchClick(wrapper), className: "patch-btn" });
-  }
-  if (text) {
-    actionList.push({ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(wrapper, "user"), className: "branch-btn" });
-    actionList.push({ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(wrapper.dataset.text || "", e.currentTarget) });
-  }
-  const actions = createActionBar(actionList);
-
-  wrapper.appendChild(div);
-  wrapper.appendChild(actions);
   dom.messages.appendChild(wrapper);
   if (!state.batchRendering) updateLastActions();
   scrollToBottom();
@@ -325,6 +333,24 @@ export function appendBot(segments, { complete = false } = {}) {
   }
 
   if (!state.batchRendering) updateLastActions();
+  scrollToBottom();
+}
+
+export function appendSystem(segments) {
+  // System/plugin output — independent row, no pending accumulation,
+  // no branch index, no action bar.
+  const row = document.createElement("div");
+  row.className = "msg-row msg-row-system";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "msg-bot msg-system";
+
+  for (const seg of segments) {
+    appendSegment(wrapper, seg);
+  }
+
+  row.appendChild(wrapper);
+  dom.messages.appendChild(row);
   scrollToBottom();
 }
 
