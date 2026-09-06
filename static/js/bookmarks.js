@@ -63,14 +63,14 @@ function isDragEnabled() {
 
 function getCardSourceLabel(bookmark) {
   switch (bookmark.source_type) {
-    case "user":      return "You";
-    case "assistant":  return "Abyss";
-    case "cot":        return "Abyss \u00B7 CoT";
+    case "user": return "Felis Abyssalis";
+    case "assistant": return "Abyss";
+    case "cot": return "Abyss \u00B7 CoT";
     case "tool":
       return bookmark.source_name
         ? `Tool \u00B7 ${bookmark.source_name}`
         : "Tool";
-    default:           return bookmark.source_type;
+    default: return bookmark.source_type;
   }
 }
 
