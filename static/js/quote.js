@@ -12,8 +12,8 @@ import { dom } from "./dom.js";
 function getSourceLabel(sourceType, sourceName) {
   switch (sourceType) {
     case "user":      return "You";
-    case "assistant":  return "Noir";
-    case "cot":        return "Noir (CoT)";
+    case "assistant":  return "Abyss";
+    case "cot":        return "Abyss (CoT)";
     case "tool":       return `Tool (${sourceName})`;
     default:           return "Unknown";
   }

@@ -27,8 +27,18 @@ import {
 } from "./conversations.js";
 import { renderSearchResults, closeSearch, initSearch } from "./search.js";
 import { initHeaderMenu } from "./header_menu.js";
-import { handleBookmarkResponse, isBookmarksPageOpen } from "./bookmarks.js";
-import { initSelectionMenu } from "./selection_menu.js";
+import {
+  handleBookmarkResponse,
+  isBookmarksPageOpen,
+  closeBookmarksPage,
+  isNotePopoverOpen,
+  closeNotePopover,
+  isEditing,
+  cancelEdit,
+  isDragging,
+  cancelDrag,
+} from "./bookmarks.js";
+import { initSelectionMenu, hideSelectionMenu } from "./selection_menu.js";
 import { initQuote } from "./quote.js";
 
 // ---- Message dispatch (called by socket.js on every WS message) ----
@@ -374,23 +384,31 @@ dom.fontToggle.addEventListener("click", cycleFont);
 // ---- Global ESC ----
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    // Esc layering: note popover → selection menu → bookmarks page → search
-    if (!dom.notePopover.classList.contains("hidden")) {
-      // Note popover close is handled by bookmarks.js (Enter/Esc binding)
-      return;
-    }
-    if (!dom.selectionMenu.classList.contains("hidden")) {
-      dom.selectionMenu.classList.add("hidden");
-      return;
-    }
-    if (isBookmarksPageOpen()) {
-      // Bookmarks page close is handled by bookmarks.js
-      return;
-    }
-    if (!dom.searchOverlay.classList.contains("hidden")) {
-      closeSearch();
-    }
+  if (e.key !== "Escape") return;
+
+  if (isNotePopoverOpen()) {
+    closeNotePopover();
+    return;
+  }
+  if (!dom.selectionMenu.classList.contains("hidden")) {
+    hideSelectionMenu();
+    return;
+  }
+  if (isDragging()) {
+    cancelDrag();
+    return;
+  }
+  if (isEditing()) {
+    cancelEdit();
+    return;
+  }
+  if (isBookmarksPageOpen()) {
+    closeBookmarksPage();
+    return;
+  }
+  if (!dom.searchOverlay.classList.contains("hidden")) {
+    closeSearch();
+    return;
   }
 });
 

@@ -447,7 +447,7 @@ export function finalizePendingBotRow() {
             content: row.dataset.text,
             context: findPreviousUserText(row),
           };
-          openNotePopover(draft, btn);
+          openNotePopover(draft, btn, btn);
         }, className: "star-btn" }]
       : []),
     ...(plainText

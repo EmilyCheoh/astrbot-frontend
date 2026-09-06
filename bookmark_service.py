@@ -178,7 +178,7 @@ class BookmarkService:
                     )
                     sort_order = cursor.fetchone()[0]
 
-                    conn.execute(
+                    cursor = conn.execute(
                         "INSERT INTO bookmarks "
                         "(id, platform_id, conversation_id, conversation_title, "
                         "source_type, source_name, capture_type, content, context, "
@@ -192,13 +192,7 @@ class BookmarkService:
                             now, now, sort_order, source_key,
                         ),
                     )
-
-                    # Check if the row was actually inserted
-                    check = conn.execute(
-                        "SELECT id FROM bookmarks WHERE id = ?",
-                        (bookmark_id,),
-                    )
-                    created = check.fetchone() is not None
+                    created = cursor.rowcount == 1
             finally:
                 conn.close()
 

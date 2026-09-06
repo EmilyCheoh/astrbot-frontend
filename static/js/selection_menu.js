@@ -169,7 +169,7 @@ function onBookmarkClick() {
     context: "",
   };
 
-  openNotePopover(draft, dom.selMenuBookmark);
+  openNotePopover(draft, dom.selMenuBookmark, null);
   hideMenuOnly(); // hide menu but keep snapshot alive for the popover
 }
 
@@ -203,17 +203,18 @@ export function initSelectionMenu() {
   dom.selMenuBookmark.addEventListener("pointerdown", (e) => e.preventDefault());
   dom.selMenuCite.addEventListener("pointerdown", (e) => e.preventDefault());
 
-  // Scroll on messages container hides menu
-  dom.messages.addEventListener("scroll", hideSelectionMenu, { passive: true });
+  // Scroll on the chat scroll container hides menu
+  dom.chatScroll.addEventListener("scroll", hideSelectionMenu, { passive: true });
 
-  // Scroll within inner scrollable blocks (CoT, tool results) — use capture
-  // on the messages container to catch scroll events from dynamic children
+  // Scroll within inner scrollable blocks (CoT, tool args, tool results) —
+  // use capture on the messages container to catch scroll events from dynamic children
   dom.messages.addEventListener("scroll", (e) => {
-    if (e.target === dom.messages) return; // already handled above
     const t = e.target;
     if (
       t.classList &&
-      (t.classList.contains("cot-content") || t.classList.contains("tool-call-result"))
+      (t.classList.contains("cot-content") ||
+       t.classList.contains("tool-call-args") ||
+       t.classList.contains("tool-call-result"))
     ) {
       hideSelectionMenu();
     }

@@ -7,7 +7,7 @@
    ================================================================ */
 
 import { dom } from "./dom.js";
-import { send } from "./socket.js";
+import { send, isConnected } from "./socket.js";
 import { utcToLocalDate, utcToLocalDisplay } from "./time.js";
 
 // ================================================================
@@ -24,10 +24,12 @@ let savedScrollTop = 0;
 let pendingRequests = new Map(); // request_id -> { type, btn, ... }
 let editingId = null;           // id of bookmark being edited, or null
 let editingSnapshot = null;     // pre-edit content/context/note for cancel
+let editingDraft = null;        // { content, context, note } — live editing state
 let reorderPending = false;
 let preReorderIds = null;       // snapshot before drag
 let pendingDraft = null;        // draft for note popover
 let pendingAnchor = null;       // anchor element for note popover positioning
+let pendingStarBtn = null;      // star button to mark filled after successful create
 
 // ================================================================
 //  Drag state
@@ -60,8 +62,8 @@ function isDragEnabled() {
 function getCardSourceLabel(bookmark) {
   switch (bookmark.source_type) {
     case "user":      return "You";
-    case "assistant":  return "Noir";
-    case "cot":        return "Noir \u00B7 CoT";
+    case "assistant":  return "Abyss";
+    case "cot":        return "Abyss \u00B7 CoT";
     case "tool":
       return bookmark.source_name
         ? `Tool \u00B7 ${bookmark.source_name}`
@@ -104,7 +106,10 @@ export function openBookmarksPage() {
   dom.bookmarksNoResults.classList.add("hidden");
 
   // Request full list from server
-  send({ type: "bookmark_list", request_id: generateRequestId() });
+  if (!isConnected()) return;
+  const requestId = generateRequestId();
+  pendingRequests.set(requestId, { type: "list" });
+  send({ type: "bookmark_list", request_id: requestId });
 }
 
 export function closeBookmarksPage() {
@@ -127,9 +132,10 @@ export function isBookmarksPageOpen() {
 //  Note popover
 // ================================================================
 
-export function openNotePopover(draft, anchorEl) {
+export function openNotePopover(draft, anchorEl, starBtn) {
   pendingDraft = draft;
   pendingAnchor = anchorEl;
+  pendingStarBtn = starBtn ?? null;
 
   // Clear input
   dom.notePopoverInput.value = "";
@@ -184,15 +190,17 @@ export function isNotePopoverOpen() {
   return !dom.notePopover.classList.contains("hidden");
 }
 
-function closeNotePopover() {
+export function closeNotePopover() {
   dom.notePopover.classList.add("hidden");
   dom.notePopoverSave.disabled = false;
   pendingDraft = null;
   pendingAnchor = null;
+  pendingStarBtn = null;
 }
 
 function saveBookmark() {
   if (!pendingDraft) return;
+  if (!isConnected()) return;
 
   const note = dom.notePopoverInput.value.trim();
   const requestId = generateRequestId();
@@ -214,8 +222,11 @@ function saveBookmark() {
   // Disable save button to prevent double-click
   dom.notePopoverSave.disabled = true;
 
-  // Track pending request (store the anchor btn for marking filled later)
-  pendingRequests.set(requestId, { type: "create", btn: pendingAnchor });
+  // Disable the star button to prevent double-click
+  if (pendingStarBtn) pendingStarBtn.disabled = true;
+
+  // Track pending request (store the star btn for marking filled later)
+  pendingRequests.set(requestId, { type: "create", starBtn: pendingStarBtn });
 
   send(msg);
 }
@@ -248,6 +259,11 @@ export function handleBookmarkResponse(data) {
 }
 
 function onBookmarksList(data) {
+  // Clear matching pending request
+  if (data.request_id) {
+    pendingRequests.delete(data.request_id);
+  }
+
   allBookmarks = data.bookmarks || [];
   dom.bookmarksLoading.classList.add("hidden");
   renderBookmarks();
@@ -263,9 +279,9 @@ function onCreateResult(data) {
     allBookmarks.unshift(data.bookmark);
   }
 
-  // Mark the star button as filled (if it's still in the DOM)
-  if (pending.btn && pending.btn.isConnected) {
-    markStarFilled(pending.btn);
+  // Mark the star button as filled (if it exists and is still in the DOM)
+  if (pending.starBtn?.isConnected) {
+    markStarFilled(pending.starBtn);
   }
 
   if (data.already_exists) {
@@ -294,6 +310,7 @@ function onUpdated(data) {
 
   editingId = null;
   editingSnapshot = null;
+  editingDraft = null;
   renderBookmarks();
 }
 
@@ -301,7 +318,7 @@ function onDeleted(data) {
   const pending = pendingRequests.get(data.request_id);
   if (pending) pendingRequests.delete(data.request_id);
 
-  allBookmarks = allBookmarks.filter(b => b.id !== data.id);
+  allBookmarks = allBookmarks.filter(b => b.id !== data.bookmark_id);
   renderBookmarks();
 }
 
@@ -325,8 +342,8 @@ function onFailed(data) {
     case "create":
       // Re-enable save button, re-enable star
       dom.notePopoverSave.disabled = false;
-      if (pending.btn && pending.btn.isConnected) {
-        pending.btn.disabled = false;
+      if (pending.starBtn?.isConnected) {
+        pending.starBtn.disabled = false;
       }
       break;
 
@@ -357,6 +374,12 @@ function onFailed(data) {
         preReorderIds = null;
       }
       renderBookmarks();
+      break;
+
+    case "list":
+      dom.bookmarksLoading.classList.add("hidden");
+      dom.bookmarksNoResults.textContent = "Couldn't load bookmarks.";
+      dom.bookmarksNoResults.classList.remove("hidden");
       break;
   }
 }
@@ -663,7 +686,7 @@ function createBookmarkCard(bookmark) {
   card.appendChild(body);
 
   // If this card is currently being edited, render edit fields
-  if (editingId === bookmark.id && editingSnapshot) {
+  if (editingId === bookmark.id) {
     activateEditUI(card, bookmark);
   }
 
@@ -689,6 +712,11 @@ function startEdit(id) {
     context: bookmark.context,
     note: bookmark.note,
   };
+  editingDraft = {
+    content: bookmark.content,
+    context: bookmark.context,
+    note: bookmark.note,
+  };
 
   renderBookmarks();
 }
@@ -701,28 +729,42 @@ function activateEditUI(card, bookmark) {
   // Insert edit fields before the source line
   const sourceLine = body.querySelector(".bookmark-source");
 
+  // Use editingDraft if available, otherwise fall back to bookmark values
+  const draftContent = editingDraft ? editingDraft.content : (bookmark.content || "");
+  const draftContext = editingDraft ? editingDraft.context : (bookmark.context || "");
+  const draftNote = editingDraft ? editingDraft.note : (bookmark.note || "");
+
   // Note edit
   const noteField = document.createElement("textarea");
   noteField.className = "bookmark-edit-field";
   noteField.placeholder = "Note";
-  noteField.value = bookmark.note || "";
+  noteField.value = draftNote;
   noteField.rows = 2;
+  noteField.addEventListener("input", () => {
+    if (editingDraft) editingDraft.note = noteField.value;
+  });
   body.insertBefore(noteField, body.firstChild);
 
   // Content edit
   const contentField = document.createElement("textarea");
   contentField.className = "bookmark-edit-field";
   contentField.placeholder = "Content (required)";
-  contentField.value = bookmark.content || "";
+  contentField.value = draftContent;
   contentField.rows = 4;
+  contentField.addEventListener("input", () => {
+    if (editingDraft) editingDraft.content = contentField.value;
+  });
   body.insertBefore(contentField, sourceLine);
 
   // Context edit
   const contextField = document.createElement("textarea");
   contextField.className = "bookmark-edit-field";
   contextField.placeholder = "Context";
-  contextField.value = bookmark.context || "";
+  contextField.value = draftContext;
   contextField.rows = 2;
+  contextField.addEventListener("input", () => {
+    if (editingDraft) editingDraft.context = contextField.value;
+  });
   body.insertBefore(contextField, sourceLine);
 
   // Replace action buttons with Save / Cancel
@@ -752,6 +794,8 @@ function activateEditUI(card, bookmark) {
 
     // Confirmation
     if (!window.confirm("Save changes to this bookmark?")) return;
+
+    if (!isConnected()) return;
 
     const requestId = generateRequestId();
     pendingRequests.set(requestId, {
@@ -789,7 +833,7 @@ function activateEditUI(card, bookmark) {
   });
 }
 
-function cancelEdit() {
+export function cancelEdit() {
   if (editingId === null) return;
 
   // Restore snapshot if we have one
@@ -804,10 +848,45 @@ function cancelEdit() {
 
   editingId = null;
   editingSnapshot = null;
+  editingDraft = null;
 
   if (isBookmarksPageOpen()) {
     renderBookmarks();
   }
+}
+
+export function isEditing() {
+  return editingId !== null;
+}
+
+export function isDragging() {
+  return dragState !== null;
+}
+
+export function cancelDrag() {
+  if (!dragState) return;
+
+  if (dragState.scrollInterval) {
+    clearInterval(dragState.scrollInterval);
+  }
+
+  const card = dragState.cardEl;
+  card.classList.remove("dragging");
+  card.style.position = "";
+  card.style.zIndex = "";
+  card.style.transform = "";
+
+  // Remove event listeners from the handle
+  const handle = card.querySelector(".bookmark-drag-handle");
+  if (handle) {
+    handle.removeEventListener("pointermove", onDragMove);
+    handle.removeEventListener("pointerup", onDragEnd);
+    handle.removeEventListener("pointercancel", onDragCancel);
+  }
+
+  dragState = null;
+  // Revert to pre-drag order — since no splice was done yet, just re-render
+  renderBookmarks();
 }
 
 // ================================================================
@@ -816,6 +895,7 @@ function cancelEdit() {
 
 function confirmDelete(id) {
   if (!window.confirm("Delete this bookmark?")) return;
+  if (!isConnected()) return;
 
   const requestId = generateRequestId();
   pendingRequests.set(requestId, { type: "delete", bookmarkId: id });
@@ -877,16 +957,20 @@ function onDragMove(e) {
   const deltaY = e.clientY - dragState.startY;
   dragState.cardEl.style.transform = `translateY(${deltaY}px)`;
 
-  // Determine which slot we're over
+  // Collect all visible card elements EXCEPT the one being dragged
   const cards = [...dom.bookmarksList.querySelectorAll(".bookmark-card")];
-  const cardMidY = e.clientY;
+  const pointerY = e.clientY;
 
-  let newIndex = dragState.startIndex;
+  // Default insertion index = 0 (top of list)
+  let newIndex = 0;
   for (let i = 0; i < cards.length; i++) {
+    if (cards[i] === dragState.cardEl) continue; // skip the dragged card
     const rect = cards[i].getBoundingClientRect();
     const mid = rect.top + rect.height / 2;
-    if (cardMidY > mid) {
-      newIndex = i;
+    if (pointerY > mid) {
+      // Pointer is past this card's midpoint — insertion goes after it
+      // Account for the dragged card's own position in the DOM list
+      newIndex = i < dragState.startIndex ? i + 1 : i;
     }
   }
 
@@ -947,6 +1031,14 @@ function onDragEnd(e) {
   const moved = allBookmarks.splice(fromIndex, 1)[0];
   allBookmarks.splice(toIndex, 0, moved);
 
+  sendReorder();
+
+  renderBookmarks();
+}
+
+function sendReorder() {
+  if (!isConnected()) return;
+
   reorderPending = true;
 
   const requestId = generateRequestId();
@@ -957,8 +1049,6 @@ function onDragEnd(e) {
     request_id: requestId,
     ordered_ids: allBookmarks.map(b => b.id),
   });
-
-  renderBookmarks();
 }
 
 function onDragCancel(e) {
@@ -1044,6 +1134,12 @@ function initBookmarks() {
   // Esc on bookmarks page
   dom.bookmarksPage.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      // If dragging, cancel drag first
+      if (dragState !== null) {
+        cancelDrag();
+        e.stopPropagation();
+        return;
+      }
       // If editing, cancel edit first
       if (editingId !== null) {
         cancelEdit();
