@@ -159,6 +159,10 @@ export function isBookmarksPageOpen() {
 // ================================================================
 
 export function handleBookmarkConnectionLost() {
+  if (dragState !== null) {
+    cancelDrag();
+  }
+
   for (const [reqId, pending] of pendingRequests) {
     switch (pending.type) {
       case "create":

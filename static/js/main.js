@@ -73,7 +73,8 @@ function handleMessage(data) {
       break;
 
     case "session_replaced":
-      // Another device/tab took over — return to login, stop reconnecting.
+      // Another device/tab took over — clean up bookmark pending state, then return to login.
+      handleBookmarkConnectionLost();
       stopReconnect();
       state.isProcessing = false;
       state.stopPending = false;
