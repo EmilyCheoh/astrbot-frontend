@@ -37,6 +37,8 @@ import {
   cancelEdit,
   isDragging,
   cancelDrag,
+  handleBookmarkConnectionLost,
+  handleBookmarkAuthenticated,
 } from "./bookmarks.js";
 import { initSelectionMenu, hideSelectionMenu } from "./selection_menu.js";
 import { initQuote } from "./quote.js";
@@ -60,6 +62,7 @@ function handleMessage(data) {
       state.stopPending = false;
       state.stopAcknowledged = false;
       state.activeMessageIds.clear();
+      handleBookmarkAuthenticated();
       break;
 
     case "takeover_waiting":
@@ -350,6 +353,10 @@ function handleMessage(data) {
       }
       break;
     }
+
+    case "connection_lost":
+      handleBookmarkConnectionLost();
+      break;
 
     // -- Bookmark responses --
     case "bookmarks_list":

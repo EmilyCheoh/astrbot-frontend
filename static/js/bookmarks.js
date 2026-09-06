@@ -25,11 +25,13 @@ let pendingRequests = new Map(); // request_id -> { type, btn, ... }
 let editingId = null;           // id of bookmark being edited, or null
 let editingSnapshot = null;     // pre-edit content/context/note for cancel
 let editingDraft = null;        // { content, context, note } — live editing state
+let updatePending = null;       // null or { requestId, bookmarkId }
 let reorderPending = false;
 let preReorderIds = null;       // snapshot before drag
 let pendingDraft = null;        // draft for note popover
 let pendingAnchor = null;       // anchor element for note popover positioning
 let pendingStarBtn = null;      // star button to mark filled after successful create
+let activeCreateRequestId = null; // request_id of the create that owns the note popover
 
 // ================================================================
 //  Drag state
@@ -37,7 +39,7 @@ let pendingStarBtn = null;      // star button to mark filled after successful c
 
 let dragState = null;
 // { cardEl, pointerId, startY, offsetY, startIndex, currentIndex,
-//   placeholder, listRect, cardRects, scrollInterval }
+//   placeholder, listRect, cardRects, scrollInterval, pointerY }
 
 // ================================================================
 //  Helpers
@@ -72,9 +74,39 @@ function getCardSourceLabel(bookmark) {
   }
 }
 
+function restoreOrderFromIds(ids) {
+  if (!ids) return;
+  const byId = new Map(allBookmarks.map(b => [b.id, b]));
+  allBookmarks = ids.map(id => byId.get(id)).filter(Boolean);
+}
+
 // ================================================================
 //  Bookmarks page open / close
 // ================================================================
+
+function requestBookmarkList() {
+  dom.bookmarksLoading.classList.remove("hidden");
+  dom.bookmarksList.classList.add("hidden");
+  dom.bookmarksEmpty.classList.add("hidden");
+  dom.bookmarksNoResults.classList.add("hidden");
+
+  if (!isConnected()) {
+    showBookmarkListError();
+    return;
+  }
+
+  const requestId = generateRequestId();
+  pendingRequests.set(requestId, { type: "list" });
+  send({ type: "bookmark_list", request_id: requestId });
+}
+
+function showBookmarkListError(message = "Couldn't load bookmarks.") {
+  dom.bookmarksLoading.classList.add("hidden");
+  dom.bookmarksList.classList.add("hidden");
+  dom.bookmarksEmpty.classList.add("hidden");
+  dom.bookmarksNoResults.textContent = message;
+  dom.bookmarksNoResults.classList.remove("hidden");
+}
 
 export function openBookmarksPage() {
   // Save chat scroll position
@@ -96,20 +128,14 @@ export function openBookmarksPage() {
   updateSortButtons();
   updateGroupToggle();
 
+  // Restore "No results." text (only showBookmarkListError changes it)
+  dom.bookmarksNoResults.textContent = "No results.";
+
   // Show bookmarks page
   dom.bookmarksPage.classList.remove("hidden");
 
-  // Show loading, hide list/empty/no-results
-  dom.bookmarksLoading.classList.remove("hidden");
-  dom.bookmarksList.classList.add("hidden");
-  dom.bookmarksEmpty.classList.add("hidden");
-  dom.bookmarksNoResults.classList.add("hidden");
-
   // Request full list from server
-  if (!isConnected()) return;
-  const requestId = generateRequestId();
-  pendingRequests.set(requestId, { type: "list" });
-  send({ type: "bookmark_list", request_id: requestId });
+  requestBookmarkList();
 }
 
 export function closeBookmarksPage() {
@@ -129,10 +155,55 @@ export function isBookmarksPageOpen() {
 }
 
 // ================================================================
+//  WebSocket disconnect / reconnect handlers
+// ================================================================
+
+export function handleBookmarkConnectionLost() {
+  for (const [reqId, pending] of pendingRequests) {
+    switch (pending.type) {
+      case "create":
+        if (pending.starBtn?.isConnected) {
+          pending.starBtn.disabled = false;
+        }
+        // If this create request owns the current note popover, close it
+        if (activeCreateRequestId === reqId) {
+          closeNotePopover();
+        }
+        break;
+      case "update":
+        // Release update lock but keep editing draft intact
+        updatePending = null;
+        break;
+      case "reorder":
+        if (preReorderIds) {
+          restoreOrderFromIds(preReorderIds);
+        }
+        reorderPending = false;
+        preReorderIds = null;
+        break;
+      // list and delete: just clear pending
+    }
+  }
+  pendingRequests.clear();
+
+  if (isBookmarksPageOpen()) {
+    showBookmarkListError();
+  }
+}
+
+export function handleBookmarkAuthenticated() {
+  if (isBookmarksPageOpen()) {
+    requestBookmarkList();
+  }
+}
+
+// ================================================================
 //  Note popover
 // ================================================================
 
 export function openNotePopover(draft, anchorEl, starBtn) {
+  activeCreateRequestId = null;
+
   pendingDraft = draft;
   pendingAnchor = anchorEl;
   pendingStarBtn = starBtn ?? null;
@@ -191,6 +262,8 @@ export function isNotePopoverOpen() {
 }
 
 export function closeNotePopover() {
+  activeCreateRequestId = null;
+
   dom.notePopover.classList.add("hidden");
   dom.notePopoverSave.disabled = false;
   pendingDraft = null;
@@ -228,6 +301,9 @@ function saveBookmark() {
   // Track pending request (store the star btn for marking filled later)
   pendingRequests.set(requestId, { type: "create", starBtn: pendingStarBtn });
 
+  // This create request now owns the note popover
+  activeCreateRequestId = requestId;
+
   send(msg);
 }
 
@@ -264,7 +340,27 @@ function onBookmarksList(data) {
     pendingRequests.delete(data.request_id);
   }
 
+  // Restore "No results." text (only showBookmarkListError changes it)
+  dom.bookmarksNoResults.textContent = "No results.";
+
   allBookmarks = data.bookmarks || [];
+
+  // Handle editing state after reconnect
+  if (editingId !== null && editingDraft) {
+    const authoritative = allBookmarks.find(b => b.id === editingId);
+    if (authoritative) {
+      editingSnapshot = {
+        content: authoritative.content,
+        context: authoritative.context,
+        note: authoritative.note,
+      };
+    } else {
+      editingId = null;
+      editingSnapshot = null;
+      editingDraft = null;
+    }
+  }
+
   dom.bookmarksLoading.classList.add("hidden");
   renderBookmarks();
 }
@@ -289,7 +385,10 @@ function onCreateResult(data) {
     showToast("Already saved.");
   }
 
-  closeNotePopover();
+  // Only close the note popover if the response matches the active request
+  if (activeCreateRequestId === data.request_id) {
+    closeNotePopover();
+  }
 
   // Re-render if bookmarks page is open
   if (isBookmarksPageOpen()) {
@@ -308,6 +407,7 @@ function onUpdated(data) {
     }
   }
 
+  updatePending = null;
   editingId = null;
   editingSnapshot = null;
   editingDraft = null;
@@ -340,19 +440,21 @@ function onFailed(data) {
 
   switch (pending.type) {
     case "create":
-      // Re-enable save button, re-enable star
-      dom.notePopoverSave.disabled = false;
+      // Re-enable star
       if (pending.starBtn?.isConnected) {
         pending.starBtn.disabled = false;
+      }
+      // Only touch the note popover if it belongs to this request
+      if (activeCreateRequestId === data.request_id) {
+        activeCreateRequestId = null;
+        dom.notePopoverSave.disabled = false;
       }
       break;
 
     case "update":
-      // Restore editing state — keep the editing UI with current edits
-      if (pending.bookmarkId) {
-        editingId = pending.bookmarkId;
-        renderBookmarks();
-      }
+      // Release update lock, keep editingId/Draft/Snapshot intact
+      updatePending = null;
+      renderBookmarks(); // Re-render with buttons enabled now
       break;
 
     case "delete":
@@ -364,22 +466,14 @@ function onFailed(data) {
       // Revert to pre-reorder order
       reorderPending = false;
       if (preReorderIds) {
-        const idMap = new Map(allBookmarks.map(b => [b.id, b]));
-        const restored = [];
-        for (const id of preReorderIds) {
-          const b = idMap.get(id);
-          if (b) restored.push(b);
-        }
-        allBookmarks = restored;
+        restoreOrderFromIds(preReorderIds);
         preReorderIds = null;
       }
       renderBookmarks();
       break;
 
     case "list":
-      dom.bookmarksLoading.classList.add("hidden");
-      dom.bookmarksNoResults.textContent = "Couldn't load bookmarks.";
-      dom.bookmarksNoResults.classList.remove("hidden");
+      showBookmarkListError();
       break;
   }
 }
@@ -698,6 +792,8 @@ function createBookmarkCard(bookmark) {
 // ================================================================
 
 function startEdit(id) {
+  if (updatePending !== null) return;
+
   if (editingId !== null) {
     // Cancel previous edit first
     cancelEdit();
@@ -734,12 +830,16 @@ function activateEditUI(card, bookmark) {
   const draftContext = editingDraft ? editingDraft.context : (bookmark.context || "");
   const draftNote = editingDraft ? editingDraft.note : (bookmark.note || "");
 
+  // Check if an update is pending for this bookmark
+  const isUpdatePending = updatePending?.bookmarkId === bookmark.id;
+
   // Note edit
   const noteField = document.createElement("textarea");
   noteField.className = "bookmark-edit-field";
   noteField.placeholder = "Note";
   noteField.value = draftNote;
   noteField.rows = 2;
+  noteField.disabled = isUpdatePending;
   noteField.addEventListener("input", () => {
     if (editingDraft) editingDraft.note = noteField.value;
   });
@@ -751,6 +851,7 @@ function activateEditUI(card, bookmark) {
   contentField.placeholder = "Content (required)";
   contentField.value = draftContent;
   contentField.rows = 4;
+  contentField.disabled = isUpdatePending;
   contentField.addEventListener("input", () => {
     if (editingDraft) editingDraft.content = contentField.value;
   });
@@ -762,6 +863,7 @@ function activateEditUI(card, bookmark) {
   contextField.placeholder = "Context";
   contextField.value = draftContext;
   contextField.rows = 2;
+  contextField.disabled = isUpdatePending;
   contextField.addEventListener("input", () => {
     if (editingDraft) editingDraft.context = contextField.value;
   });
@@ -777,12 +879,17 @@ function activateEditUI(card, bookmark) {
   const cancelBtn = document.createElement("button");
   cancelBtn.className = "bookmark-action-btn";
   cancelBtn.textContent = "Cancel";
+  cancelBtn.disabled = isUpdatePending;
   cancelBtn.addEventListener("click", () => cancelEdit());
 
   const saveBtn = document.createElement("button");
   saveBtn.className = "bookmark-action-btn bookmark-save-btn";
   saveBtn.textContent = "Save";
+  saveBtn.disabled = isUpdatePending;
   saveBtn.addEventListener("click", () => {
+    if (updatePending !== null) return;
+    if (!isConnected()) return;
+
     const newContent = contentField.value.trim();
     const newContext = contextField.value.trim();
     const newNote = noteField.value.trim();
@@ -798,6 +905,7 @@ function activateEditUI(card, bookmark) {
     if (!isConnected()) return;
 
     const requestId = generateRequestId();
+    updatePending = { requestId, bookmarkId: bookmark.id };
     pendingRequests.set(requestId, {
       type: "update",
       bookmarkId: bookmark.id,
@@ -805,6 +913,9 @@ function activateEditUI(card, bookmark) {
 
     saveBtn.disabled = true;
     cancelBtn.disabled = true;
+    contentField.disabled = true;
+    contextField.disabled = true;
+    noteField.disabled = true;
 
     send({
       type: "bookmark_update",
@@ -835,6 +946,7 @@ function activateEditUI(card, bookmark) {
 
 export function cancelEdit() {
   if (editingId === null) return;
+  if (updatePending !== null && updatePending.bookmarkId === editingId) return;
 
   // Restore snapshot if we have one
   if (editingSnapshot) {
@@ -916,6 +1028,21 @@ function getCardIndex(card) {
   return cards.indexOf(card);
 }
 
+function updateDragTarget(pointerY) {
+  if (!dragState) return;
+  const cards = [...dom.bookmarksList.querySelectorAll(".bookmark-card")];
+  let newIndex = 0;
+  for (let i = 0; i < cards.length; i++) {
+    if (cards[i] === dragState.cardEl) continue;
+    const rect = cards[i].getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    if (pointerY > midpoint) {
+      newIndex = i < dragState.startIndex ? i + 1 : i;
+    }
+  }
+  dragState.currentIndex = newIndex;
+}
+
 function onDragStart(e, card) {
   if (!isDragEnabled()) return;
   e.preventDefault();
@@ -940,6 +1067,7 @@ function onDragStart(e, card) {
     listRect,
     cardRects,
     scrollInterval: null,
+    pointerY: e.clientY,
   };
 
   card.classList.add("dragging");
@@ -957,24 +1085,8 @@ function onDragMove(e) {
   const deltaY = e.clientY - dragState.startY;
   dragState.cardEl.style.transform = `translateY(${deltaY}px)`;
 
-  // Collect all visible card elements EXCEPT the one being dragged
-  const cards = [...dom.bookmarksList.querySelectorAll(".bookmark-card")];
-  const pointerY = e.clientY;
-
-  // Default insertion index = 0 (top of list)
-  let newIndex = 0;
-  for (let i = 0; i < cards.length; i++) {
-    if (cards[i] === dragState.cardEl) continue; // skip the dragged card
-    const rect = cards[i].getBoundingClientRect();
-    const mid = rect.top + rect.height / 2;
-    if (pointerY > mid) {
-      // Pointer is past this card's midpoint — insertion goes after it
-      // Account for the dragged card's own position in the DOM list
-      newIndex = i < dragState.startIndex ? i + 1 : i;
-    }
-  }
-
-  dragState.currentIndex = newIndex;
+  dragState.pointerY = e.clientY;
+  updateDragTarget(dragState.pointerY);
 
   // Auto-scroll the bookmarks list if near edges
   const listRect = dom.bookmarksList.getBoundingClientRect();
@@ -988,6 +1100,7 @@ function onDragMove(e) {
   if (e.clientY < listRect.top + edgeZone && dom.bookmarksList.scrollTop > 0) {
     dragState.scrollInterval = setInterval(() => {
       dom.bookmarksList.scrollTop -= 5;
+      updateDragTarget(dragState.pointerY);
     }, 16);
   } else if (
     e.clientY > listRect.bottom - edgeZone &&
@@ -995,6 +1108,7 @@ function onDragMove(e) {
   ) {
     dragState.scrollInterval = setInterval(() => {
       dom.bookmarksList.scrollTop += 5;
+      updateDragTarget(dragState.pointerY);
     }, 16);
   }
 }
@@ -1031,13 +1145,16 @@ function onDragEnd(e) {
   const moved = allBookmarks.splice(fromIndex, 1)[0];
   allBookmarks.splice(toIndex, 0, moved);
 
-  sendReorder();
+  if (!sendReorder()) {
+    restoreOrderFromIds(preReorderIds);
+    preReorderIds = null;
+  }
 
   renderBookmarks();
 }
 
 function sendReorder() {
-  if (!isConnected()) return;
+  if (!isConnected()) return false;
 
   reorderPending = true;
 
@@ -1049,6 +1166,8 @@ function sendReorder() {
     request_id: requestId,
     ordered_ids: allBookmarks.map(b => b.id),
   });
+
+  return true;
 }
 
 function onDragCancel(e) {

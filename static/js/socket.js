@@ -67,6 +67,9 @@ export function connectWS(token, onMessage) {
     }
 
     if (savedToken) {
+      if (messageHandler) {
+        messageHandler({ type: "connection_lost" });
+      }
       scheduleReconnect();
     }
   };
