@@ -7,6 +7,7 @@ import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { send, isConnected } from "./socket.js";
 import { appendUser } from "./messages.js";
+import { formatQuoteForSend, clearPendingQuote, hasPendingQuote } from "./quote.js";
 
 // ---- Constants ----
 
@@ -217,8 +218,16 @@ export function sendMessage() {
   if (!text && images.length === 0 && files.length === 0) return;
   if (!isConnected()) return;
 
+  // Slash commands: send as-is, do not append or clear the pending quote
+  const isSlash = text.startsWith("/");
+
+  // For normal messages, append the citation block if a quote is pending
+  const finalContent = (!isSlash && hasPendingQuote())
+    ? formatQuoteForSend(text)
+    : text;
+
   const id = crypto.randomUUID();
-  const payload = { type: "message", id, content: text };
+  const payload = { type: "message", id, content: finalContent };
   if (images.length > 0) payload.images = images.map((i) => i.dataUri);
   if (files.length > 0) payload.files = files.map((f) => ({ name: f.name, data: f.dataUri }));
 
@@ -226,10 +235,11 @@ export function sendMessage() {
 
   state.stopAcknowledged = false;
   send(payload);
-  appendUser(text, { images, files, hasAttachment });
+  appendUser(finalContent, { images, files, hasAttachment });
   dom.msgInput.value = "";
   dom.msgInput.style.height = "auto";
   clearPending();
+  if (!isSlash) clearPendingQuote();
 }
 
 // ---- Stop generation ----

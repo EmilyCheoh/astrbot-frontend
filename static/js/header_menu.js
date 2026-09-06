@@ -7,9 +7,11 @@ import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { send, isConnected } from "./socket.js";
 import { showDeleteDialog } from "./conversations.js";
+import { openBookmarksPage } from "./bookmarks.js";
 
 const ICON_STAR = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
 const ICON_STAR_FILLED = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+const ICON_BOOKMARK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>';
 
 // ---- Overflow menu ----
 
@@ -79,6 +81,13 @@ function handleDelete() {
   showDeleteDialog(conv);
 }
 
+// ---- Bookmarks action ----
+
+function handleBookmarks() {
+  closeMoreMenu();
+  openBookmarksPage();
+}
+
 // ---- Bind events ----
 
 export function initHeaderMenu() {
@@ -94,5 +103,6 @@ export function initHeaderMenu() {
   });
 
   dom.morePinBtn.addEventListener("click", handlePin);
+  dom.moreBookmarksBtn.addEventListener("click", handleBookmarks);
   dom.moreDeleteBtn.addEventListener("click", handleDelete);
 }

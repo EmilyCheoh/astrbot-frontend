@@ -40,4 +40,37 @@ export const dom = {
   morePinBtn:         document.getElementById("more-pin-btn"),
   moreDeleteBtn:      document.getElementById("more-delete-btn"),
   scrollBottomBtn:    document.getElementById("scroll-bottom-btn"),
+  moreBookmarksBtn:   document.getElementById("more-bookmarks-btn"),
+
+  // -- Bookmarks page --
+  bookmarksPage:      document.getElementById("bookmarks-page"),
+  bookmarksCloseBtn:  document.getElementById("bookmarks-close-btn"),
+  bookmarksList:      document.getElementById("bookmarks-list"),
+  bookmarksSearch:    document.getElementById("bookmarks-search"),
+  bookmarksDateFrom:  document.getElementById("bookmarks-date-from"),
+  bookmarksDateTo:    document.getElementById("bookmarks-date-to"),
+  bookmarksSortCustom:  document.getElementById("bookmarks-sort-custom"),
+  bookmarksSortNewest:  document.getElementById("bookmarks-sort-newest"),
+  bookmarksSortOldest:  document.getElementById("bookmarks-sort-oldest"),
+  bookmarksGroupToggle: document.getElementById("bookmarks-group-toggle"),
+  bookmarksEmpty:     document.getElementById("bookmarks-empty"),
+  bookmarksNoResults: document.getElementById("bookmarks-no-results"),
+  bookmarksLoading:   document.getElementById("bookmarks-loading"),
+
+  // -- Note popover --
+  notePopover:        document.getElementById("note-popover"),
+  notePopoverInput:   document.getElementById("note-popover-input"),
+  notePopoverCancel:  document.getElementById("note-popover-cancel"),
+  notePopoverSave:    document.getElementById("note-popover-save"),
+
+  // -- Selection menu --
+  selectionMenu:      document.getElementById("selection-menu"),
+  selMenuBookmark:    document.getElementById("sel-menu-bookmark"),
+  selMenuCite:        document.getElementById("sel-menu-cite"),
+
+  // -- Quote preview --
+  quotePreview:       document.getElementById("quote-preview"),
+  quotePreviewSource: document.getElementById("quote-preview-source"),
+  quotePreviewText:   document.getElementById("quote-preview-text"),
+  quotePreviewClose:  document.getElementById("quote-preview-close"),
 };

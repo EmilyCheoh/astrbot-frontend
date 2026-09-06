@@ -43,4 +43,8 @@ export const state = {
 
   // Pin operation tracking (per-conversation)
   pendingPinIds: new Set(),
+
+  // -- Bookmark / citation state --
+  currentPlatformId: "",    // synced from history, conversation_created, conversation_branched
+  pendingQuote: null,       // { text, sourceType, sourceName } or null
 };

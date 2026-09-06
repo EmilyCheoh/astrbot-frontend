@@ -19,6 +19,8 @@
   <link rel="stylesheet" href="/static/css/composer.css">
   <link rel="stylesheet" href="/static/css/conversations.css">
   <link rel="stylesheet" href="/static/css/overlays.css">
+  <link rel="stylesheet" href="/static/css/bookmarks.css">
+  <link rel="stylesheet" href="/static/css/selection.css">
   <!-- Third-party libs (classic scripts — available as window globals) -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
@@ -53,6 +55,13 @@
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
               Star
+            </button>
+            <button id="more-bookmarks-btn" class="more-menu-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+              </svg>
+              Bookmarks
             </button>
             <div class="more-menu-separator"></div>
             <button id="more-delete-btn" class="more-menu-item danger">
@@ -136,6 +145,11 @@
     <footer class="composer-section">
       <div class="composer">
         <div id="img-preview" class="img-preview hidden"></div>
+        <div id="quote-preview" class="quote-preview hidden">
+          <span id="quote-preview-source" class="quote-preview-source"></span>
+          <span id="quote-preview-text" class="quote-preview-text"></span>
+          <button id="quote-preview-close" class="quote-preview-close">&times;</button>
+        </div>
         <div class="composer-row">
           <button id="attach-btn" class="attach-btn" title="Attach files">+</button>
           <input type="file" id="file-input" multiple class="hidden">
@@ -153,10 +167,55 @@
         </div>
       </div>
     </footer>
+
+    <!-- Bookmarks page overlay -->
+    <div id="bookmarks-page" class="bookmarks-page hidden">
+      <div class="bookmarks-header">
+        <h2>Bookmarks</h2>
+        <button id="bookmarks-close-btn" class="bookmarks-close-btn">&times;</button>
+      </div>
+      <div class="bookmarks-toolbar">
+        <div class="bookmarks-search-row">
+          <input type="text" id="bookmarks-search" placeholder="Search bookmarks..." autocomplete="off">
+          <input type="date" id="bookmarks-date-from">
+          <input type="date" id="bookmarks-date-to">
+        </div>
+        <div class="bookmarks-controls-row">
+          <div class="bookmarks-sort-group">
+            <button id="bookmarks-sort-custom" class="bookmarks-sort-btn active">Custom</button>
+            <button id="bookmarks-sort-newest" class="bookmarks-sort-btn">Newest</button>
+            <button id="bookmarks-sort-oldest" class="bookmarks-sort-btn">Oldest</button>
+          </div>
+          <button id="bookmarks-group-toggle" class="bookmarks-group-toggle">Group by conversation</button>
+        </div>
+      </div>
+      <div id="bookmarks-list" class="bookmarks-list"></div>
+      <div id="bookmarks-empty" class="bookmarks-empty hidden">No bookmarks yet.</div>
+      <div id="bookmarks-no-results" class="bookmarks-no-results hidden">No results.</div>
+      <div id="bookmarks-loading" class="bookmarks-loading hidden">Loading...</div>
+    </div>
+  </div>
+
+  <!-- Note popover -->
+  <div id="note-popover" class="note-popover hidden">
+    <textarea id="note-popover-input" placeholder="Add a note..." rows="2"></textarea>
+    <div class="note-popover-actions">
+      <button id="note-popover-cancel">Cancel</button>
+      <button id="note-popover-save">Save</button>
+    </div>
+  </div>
+
+  <!-- Selection menu -->
+  <div id="selection-menu" class="selection-menu hidden">
+    <button id="sel-menu-bookmark">&#9734; Bookmark</button>
+    <button id="sel-menu-cite">&#10077; Cite</button>
   </div>
 
   <!-- JS entry point — ES module -->
   <script type="module" src="/static/js/main.js"></script>
+  <script type="module" src="/static/js/bookmarks.js"></script>
+  <script type="module" src="/static/js/selection_menu.js"></script>
+  <script type="module" src="/static/js/quote.js"></script>
 </body>
 
 </html>

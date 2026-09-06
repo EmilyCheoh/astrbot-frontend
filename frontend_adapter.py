@@ -24,6 +24,7 @@ from astrbot.api.event import MessageChain
 from astrbot import logger
 
 from .auth_guard import AuthGuard
+from .bookmark_service import BookmarkService
 from .conversation_service import ConversationService
 from .media_utils import chain_to_segments
 from .message_service import MessageService
@@ -69,6 +70,9 @@ class FrontendAdapter(Platform):
 
         # Conversation CRUD, search, pins, history
         self.conversations = ConversationService(config=self.config, umo=self._umo)
+
+        # Bookmark (favorites) service — same data directory as conversation DB
+        self.bookmarks = BookmarkService(self.conversations.data_dir)
 
         # Message intake, retry/edit
         self.messages = MessageService(
@@ -350,6 +354,22 @@ class FrontendAdapter(Platform):
 
         elif kind == "save_user_message_patch":
             await self.messages.handle_save_user_message_patch(ws, data)
+
+        # -- Bookmark CRUD (non-turn, never frozen) ----------------
+        elif kind == "bookmark_list":
+            await self.bookmarks.handle_list(ws, data)
+
+        elif kind == "bookmark_create":
+            await self.bookmarks.handle_create(ws, data)
+
+        elif kind == "bookmark_update":
+            await self.bookmarks.handle_update(ws, data)
+
+        elif kind == "bookmark_delete":
+            await self.bookmarks.handle_delete(ws, data)
+
+        elif kind == "bookmark_reorder":
+            await self.bookmarks.handle_reorder(ws, data)
 
     # -- WebSocket handler ---------------------------------------------------
 

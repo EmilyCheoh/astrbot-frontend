@@ -49,13 +49,17 @@ class ConversationService:
                 return str(p)
         return None
 
+    @property
+    def data_dir(self) -> Path:
+        """Resolve the AstrBot data directory (where data_v4.db lives)."""
+        db_path = self.find_db()
+        return Path(db_path).parent if db_path else Path("/opt/astrbot/data")
+
     # -- Pin storage -----------------------------------------------------------
 
     def _pins_path(self) -> Path:
         """Path to the server-side pin storage file."""
-        db_path = self.find_db()
-        data_dir = Path(db_path).parent if db_path else Path("/opt/astrbot/data")
-        return data_dir / "den_pins.json"
+        return self.data_dir / "den_pins.json"
 
     def load_pins(self) -> list[str]:
         path = self._pins_path()
@@ -504,6 +508,7 @@ class ConversationService:
             await ws.send_json({
                 "type": "conversation_created",
                 "conversation_id": cid,
+                "platform_id": platform_id,
             })
         except Exception as exc:
             logger.warning(f"Failed to create conversation: {exc}")
@@ -708,6 +713,7 @@ class ConversationService:
                 "title": branched_title,
                 "messages": branched_history,
                 "draft": draft,
+                "platform_id": den_platform_id,
             })
 
         except Exception as exc:

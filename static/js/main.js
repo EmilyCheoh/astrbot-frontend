@@ -27,6 +27,9 @@ import {
 } from "./conversations.js";
 import { renderSearchResults, closeSearch, initSearch } from "./search.js";
 import { initHeaderMenu } from "./header_menu.js";
+import { handleBookmarkResponse, isBookmarksPageOpen } from "./bookmarks.js";
+import { initSelectionMenu } from "./selection_menu.js";
+import { initQuote } from "./quote.js";
 
 // ---- Message dispatch (called by socket.js on every WS message) ----
 
@@ -65,6 +68,7 @@ function handleMessage(data) {
       state.activeMessageIds.clear();
       state.isBranching = false;
       state.pendingConversationId = null;
+      state.currentPlatformId = "";
       dom.chat.classList.add("hidden");
       dom.login.classList.remove("hidden");
       dom.thinkingIndicator.classList.add("hidden");
@@ -166,6 +170,7 @@ function handleMessage(data) {
       dom.thinkingIndicator.classList.add("hidden");
       resetUserPatchState();
       state.currentConversationId = data.conversation_id || null;
+      state.currentPlatformId = data.platform_id || "";
       state.pendingConversationId = null;
       // Clear search anchor if we navigated away from it
       if (state.activeAnchorId && state.activeAnchorId !== data.conversation_id) {
@@ -239,6 +244,7 @@ function handleMessage(data) {
       state.isBranching = false;
       resetUserPatchState();
       state.currentConversationId = data.conversation_id || null;
+      state.currentPlatformId = data.platform_id || "";
       state.pendingConversationId = null;
       state.activeAnchorId = null;
       state.currentMessages = [];
@@ -255,6 +261,7 @@ function handleMessage(data) {
       resetUserPatchState();
 
       state.currentConversationId = data.conversation_id || null;
+      state.currentPlatformId = data.platform_id || "";
       state.pendingConversationId = null;
       state.activeAnchorId = null;
       state.currentMessages = data.messages || [];
@@ -333,6 +340,16 @@ function handleMessage(data) {
       }
       break;
     }
+
+    // -- Bookmark responses --
+    case "bookmarks_list":
+    case "bookmark_create_result":
+    case "bookmark_updated":
+    case "bookmark_deleted":
+    case "bookmarks_reordered":
+    case "bookmark_failed":
+      handleBookmarkResponse(data);
+      break;
   }
 }
 
@@ -358,6 +375,19 @@ dom.fontToggle.addEventListener("click", cycleFont);
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
+    // Esc layering: note popover → selection menu → bookmarks page → search
+    if (!dom.notePopover.classList.contains("hidden")) {
+      // Note popover close is handled by bookmarks.js (Enter/Esc binding)
+      return;
+    }
+    if (!dom.selectionMenu.classList.contains("hidden")) {
+      dom.selectionMenu.classList.add("hidden");
+      return;
+    }
+    if (isBookmarksPageOpen()) {
+      // Bookmarks page close is handled by bookmarks.js
+      return;
+    }
     if (!dom.searchOverlay.classList.contains("hidden")) {
       closeSearch();
     }
@@ -371,3 +401,5 @@ initConversations();
 initSearch();
 initHeaderMenu();
 initScrollButton();
+initSelectionMenu();
+initQuote();

@@ -7,6 +7,7 @@ import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { send, isConnected } from "./socket.js";
 import { updateComposerAvailability } from "./composer.js";
+import { openNotePopover } from "./bookmarks.js";
 
 // ---- Markdown rendering ----
 
@@ -35,6 +36,8 @@ const ICON_RETRY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" 
 const ICON_EDIT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
 const ICON_PATCH = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(-45 12 12)"><rect x="0.9" y="6.9" width="22.2" height="10.2" rx="5.1" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><rect x="9.2" y="9.2" width="5.6" height="5.6" rx="0.7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><circle cx="4.75" cy="10" r="0.55" fill="currentColor"/><circle cx="6.15" cy="13.9" r="0.55" fill="currentColor"/><circle cx="17.85" cy="10.1" r="0.55" fill="currentColor"/><circle cx="19.25" cy="14" r="0.55" fill="currentColor"/></g></svg>';
 const ICON_BRANCH = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h5c3 0 4.5-1.5 6-3l4-4"/><path d="M14 5h4v4"/><path d="m14 15 4 4"/><path d="M14 19h4v-4"/></svg>';
+const ICON_STAR = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+const ICON_STAR_FILLED = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
 
 // ---- Helpers ----
 
@@ -132,6 +135,38 @@ function copyText(text, btn) {
     }, 1500);
   });
 }
+
+// ---- Star bookmark helpers ----
+
+function findPreviousUserText(botRow) {
+  const children = Array.from(dom.messages.children);
+  const idx = children.indexOf(botRow);
+  if (idx < 0) return "";
+
+  for (let i = idx - 1; i >= 0; i--) {
+    const child = children[i];
+    // Skip non-user rows, command rows, and system rows
+    if (
+      !child.classList.contains("msg-row-user")
+      || child.classList.contains("msg-row-command")
+      || child.classList.contains("msg-row-system")
+    ) {
+      // If we hit another bot row, keep searching backward
+      if (child.classList.contains("msg-row-bot")) continue;
+      continue;
+    }
+    return child.dataset.text || "";
+  }
+  return "";
+}
+
+export function markStarFilled(btn) {
+  btn.innerHTML = ICON_STAR_FILLED;
+  btn.classList.add("bookmarked");
+  btn.disabled = true;
+}
+
+// ---- Scroll / last-action tracking ----
 
 export function scrollToBottom() {
   requestAnimationFrame(() => {
@@ -398,6 +433,22 @@ export function finalizePendingBotRow() {
       : []),
     ...(branchable
       ? [{ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" }]
+      : []),
+    ...(plainText
+      ? [{ icon: ICON_STAR, title: "Bookmark", onClick: (e) => {
+          const btn = e.currentTarget;
+          const draft = {
+            platformId: state.currentPlatformId,
+            conversationId: state.currentConversationId,
+            conversationTitle: state.currentConvTitle || "",
+            sourceType: "assistant",
+            captureType: "message",
+            branchIndex: parseInt(row.dataset.branchIndex, 10) || 0,
+            content: row.dataset.text,
+            context: findPreviousUserText(row),
+          };
+          openNotePopover(draft, btn);
+        }, className: "star-btn" }]
       : []),
     ...(plainText
       ? [{ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(row.dataset.text || "", e.currentTarget) }]
@@ -1072,3 +1123,5 @@ export function setComposerReadonly(readonly) {
     if (existing) existing.remove();
   }
 }
+
+export { ICON_STAR, ICON_STAR_FILLED };
