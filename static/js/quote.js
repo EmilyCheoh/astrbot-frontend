@@ -11,11 +11,11 @@ import { dom } from "./dom.js";
 
 function getSourceLabel(sourceType, sourceName) {
   switch (sourceType) {
-    case "user":      return "You";
-    case "assistant":  return "Abyss";
-    case "cot":        return "Abyss (CoT)";
-    case "tool":       return `Tool (${sourceName})`;
-    default:           return "Unknown";
+    case "user": return "Felis Abyssalis";
+    case "assistant": return "Abyss";
+    case "cot": return "Abyss (CoT)";
+    case "tool": return `Tool (${sourceName})`;
+    default: return "Unknown";
   }
 }
 
