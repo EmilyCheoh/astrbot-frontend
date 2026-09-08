@@ -778,30 +778,24 @@ function createBookmarkCard(bookmark) {
   const cardHeader = document.createElement("div");
   cardHeader.className = "bookmark-card-header";
 
-  // Emoji badge
+  // Note line: emoji + note text
   const label = getLabelById(bookmark.label_id) || getDefaultLabel();
+  const noteLine = document.createElement("div");
+  noteLine.className = "bookmark-note-line";
+
   const badge = document.createElement("span");
   badge.className = "bookmark-emoji-badge";
   badge.textContent = label ? label.emoji : "";
-  cardHeader.appendChild(badge);
+  noteLine.appendChild(badge);
 
-  // Note (if exists)
   if (bookmark.note) {
-    const noteBlock = document.createElement("div");
-    noteBlock.className = "bookmark-note-block";
-
-    const noteTag = document.createElement("span");
-    noteTag.className = "bookmark-tag";
-    noteTag.textContent = "NOTE";
-    noteBlock.appendChild(noteTag);
-
     const noteText = document.createElement("span");
     noteText.className = "bookmark-note";
     noteText.textContent = bookmark.note;
-    noteBlock.appendChild(noteText);
-
-    cardHeader.appendChild(noteBlock);
+    noteLine.appendChild(noteText);
   }
+
+  cardHeader.appendChild(noteLine);
 
   // Spacer to push menu right
   const spacer = document.createElement("div");
@@ -894,6 +888,9 @@ function createBookmarkCard(bookmark) {
   // After DOM insertion, check overflow for expand button
   requestAnimationFrame(() => {
     if (!card.isConnected) return;
+    // Edit mode: keep expand button hidden — edit UI handles content directly
+    if (editingId === bookmark.id) return;
+
     const hasOverflow = contentEl.scrollHeight > contentEl.clientHeight + 2;
     const hasContext = !!bookmark.context;
 
@@ -1055,36 +1052,82 @@ function activateEditUI(card, bookmark) {
 
   const isUpdatePending = updatePending?.bookmarkId === bookmark.id;
 
-  // Label emoji picker
-  const labelPicker = document.createElement("div");
-  labelPicker.className = "bookmark-edit-label-picker";
-  for (const label of allLabels) {
-    const lbtn = document.createElement("button");
-    lbtn.className = "note-popover-label-btn" + (label.id === draftLabelId ? " active" : "");
-    lbtn.textContent = label.emoji;
-    lbtn.type = "button";
-    lbtn.disabled = isUpdatePending;
-    lbtn.addEventListener("click", () => {
-      if (editingDraft) editingDraft.labelId = label.id;
-      labelPicker.querySelectorAll(".note-popover-label-btn").forEach(b => {
-        b.classList.toggle("active", b === lbtn);
-      });
-    });
-    labelPicker.appendChild(lbtn);
-  }
-  body.insertBefore(labelPicker, sourceLine);
+  // Meta row: [label dropdown trigger] | [note input]
+  const editMetaRow = document.createElement("div");
+  editMetaRow.className = "bookmark-edit-meta-row";
 
-  // Note edit
+  // Label dropdown trigger
+  const labelControl = document.createElement("div");
+  labelControl.className = "bookmark-edit-label-control";
+
+  const currentLabel = getLabelById(draftLabelId) || getDefaultLabel();
+  const labelTrigger = document.createElement("button");
+  labelTrigger.className = "bookmark-edit-label-trigger";
+  labelTrigger.type = "button";
+  labelTrigger.textContent = (currentLabel ? currentLabel.emoji : "?") + " \u25BE";
+  labelTrigger.disabled = isUpdatePending;
+
+  const editLabelDropdown = document.createElement("div");
+  editLabelDropdown.className = "bookmark-edit-label-dropdown hidden";
+
+  for (const lbl of allLabels) {
+    const opt = document.createElement("button");
+    opt.className = "bookmarks-label-dropdown-item" + (lbl.id === draftLabelId ? " active" : "");
+    opt.textContent = lbl.emoji;
+    opt.type = "button";
+    opt.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (editingDraft) editingDraft.labelId = lbl.id;
+      labelTrigger.textContent = lbl.emoji + " \u25BE";
+      editLabelDropdown.querySelectorAll(".bookmarks-label-dropdown-item").forEach(b => {
+        b.classList.toggle("active", b === opt);
+      });
+      editLabelDropdown.classList.add("hidden");
+    });
+    editLabelDropdown.appendChild(opt);
+  }
+
+  labelTrigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (isUpdatePending) return;
+    editLabelDropdown.classList.toggle("hidden");
+  });
+
+  labelControl.appendChild(labelTrigger);
+  labelControl.appendChild(editLabelDropdown);
+  editMetaRow.appendChild(labelControl);
+
+  // Divider
+  const metaDivider = document.createElement("div");
+  metaDivider.className = "bookmark-edit-meta-divider";
+  editMetaRow.appendChild(metaDivider);
+
+  // Note input
   const noteField = document.createElement("textarea");
-  noteField.className = "bookmark-edit-field";
+  noteField.className = "bookmark-edit-note-field";
   noteField.placeholder = "Note";
   noteField.value = draftNote;
-  noteField.rows = 2;
+  noteField.rows = 1;
   noteField.disabled = isUpdatePending;
   noteField.addEventListener("input", () => {
     if (editingDraft) editingDraft.note = noteField.value;
+    noteField.style.height = "auto";
+    noteField.style.height = Math.min(noteField.scrollHeight, 120) + "px";
   });
-  body.insertBefore(noteField, sourceLine);
+  editMetaRow.appendChild(noteField);
+
+  body.insertBefore(editMetaRow, sourceLine);
+
+  // Close edit label dropdown on outside click
+  const closeEditLabelDropdown = (e) => {
+    if (!labelControl.contains(e.target)) {
+      editLabelDropdown.classList.add("hidden");
+    }
+  };
+  document.addEventListener("click", closeEditLabelDropdown);
+  card._cleanupEditLabelDropdown = () => {
+    document.removeEventListener("click", closeEditLabelDropdown);
+  };
 
   // Content edit
   const contentField = document.createElement("textarea");
@@ -1158,7 +1201,7 @@ function activateEditUI(card, bookmark) {
         contentField.disabled = true;
         contextField.disabled = true;
         noteField.disabled = true;
-        labelPicker.querySelectorAll("button").forEach(b => b.disabled = true);
+        labelTrigger.disabled = true;
 
         send({
           type: "bookmark_update",
@@ -1180,7 +1223,7 @@ function activateEditUI(card, bookmark) {
   body.insertBefore(editActions, sourceLine);
 
   // Auto-resize textareas
-  [noteField, contentField, contextField].forEach(ta => {
+  [contentField, contextField].forEach(ta => {
     ta.addEventListener("input", () => {
       ta.style.height = "auto";
       ta.style.height = Math.min(ta.scrollHeight, 300) + "px";
@@ -1189,11 +1232,26 @@ function activateEditUI(card, bookmark) {
       ta.style.height = Math.min(ta.scrollHeight, 300) + "px";
     });
   });
+  // Initial height for note field
+  requestAnimationFrame(() => {
+    noteField.style.height = Math.min(noteField.scrollHeight, 120) + "px";
+  });
+}
+
+function cleanupEditCard() {
+  if (editingId === null) return;
+  const card = dom.bookmarksList?.querySelector(`.bookmark-card[data-id="${editingId}"]`);
+  if (card && card._cleanupEditLabelDropdown) {
+    card._cleanupEditLabelDropdown();
+    card._cleanupEditLabelDropdown = null;
+  }
 }
 
 function cancelEdit() {
   if (editingId === null) return;
   if (updatePending !== null && updatePending.bookmarkId === editingId) return;
+
+  cleanupEditCard();
 
   if (editingSnapshot) {
     const bookmark = allBookmarks.find(b => b.id === editingId);
@@ -1687,6 +1745,7 @@ function onBookmarksList(data) {
         labelId: authoritative.label_id,
       };
     } else {
+      cleanupEditCard();
       editingId = null;
       editingSnapshot = null;
       editingDraft = null;
@@ -1735,6 +1794,7 @@ function onUpdated(data) {
     }
   }
 
+  cleanupEditCard();
   updatePending = null;
   editingId = null;
   editingSnapshot = null;
@@ -1750,6 +1810,7 @@ function onDeleted(data) {
 
   // Clear edit if matching
   if (editingId === data.bookmark_id) {
+    cleanupEditCard();
     editingId = null;
     editingSnapshot = null;
     editingDraft = null;

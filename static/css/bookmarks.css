@@ -242,7 +242,7 @@
   top: 100%;
   right: 0;
   margin-top: 4px;
-  min-width: 120px;
+  min-width: 48px;
   padding: 6px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -250,8 +250,8 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 110;
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-direction: column;
+  gap: 2px;
 }
 
 [data-theme="dark"] .bookmarks-label-dropdown {
@@ -263,6 +263,7 @@
 }
 
 .bookmarks-label-dropdown-item {
+  width: 100%;
   padding: 6px 10px;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -271,6 +272,8 @@
   font-size: 13px;
   cursor: pointer;
   transition: background 0.12s;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .bookmarks-label-dropdown-item:hover {
@@ -341,11 +344,11 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.bookmark-note-block {
-  flex: 1;
+.bookmark-note-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
-  padding-left: 8px;
-  border-left: 2px solid var(--accent);
 }
 
 .bookmark-note {
@@ -353,7 +356,8 @@
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.5;
-  margin-top: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .bookmark-menu-btn {
@@ -599,11 +603,102 @@
 }
 
 /* ---- Edit state ---- */
-.bookmark-edit-label-picker {
+.bookmark-edit-meta-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  align-items: center;
+  gap: 0;
   margin-bottom: 8px;
+}
+
+.bookmark-edit-label-control {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.bookmark-edit-label-trigger {
+  padding: 6px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  transition: border-color 0.15s;
+  white-space: nowrap;
+}
+
+.bookmark-edit-label-trigger:hover {
+  border-color: var(--border-strong);
+}
+
+.bookmark-edit-label-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bookmark-edit-label-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 48px;
+  padding: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+[data-theme="dark"] .bookmark-edit-label-dropdown {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.bookmark-edit-label-dropdown.hidden {
+  display: none;
+}
+
+.bookmark-edit-meta-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-subtle);
+  margin: 0 10px;
+  flex-shrink: 0;
+}
+
+.bookmark-edit-note-field {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: none;
+  min-height: 32px;
+  box-sizing: border-box;
+  outline: none;
+  line-height: 1.5;
+  transition: border-color 0.15s;
+}
+
+.bookmark-edit-note-field:focus {
+  border-color: var(--border-strong);
+}
+
+.bookmark-edit-note-field::placeholder {
+  color: var(--text-placeholder);
+}
+
+.bookmark-edit-note-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .bookmark-edit-field {
