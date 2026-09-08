@@ -483,6 +483,10 @@
   display: none;
 }
 
+.bookmark-context-section > .bookmark-tag {
+  margin-bottom: 0;
+}
+
 .bookmark-context {
   padding: 8px 12px;
   background: var(--bg-primary);

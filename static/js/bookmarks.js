@@ -927,7 +927,7 @@ function createBookmarkCard(bookmark) {
     contentEl.style.pointerEvents = "";
 
     const fullHeight = contentEl.scrollHeight;
-    // 8em at 14px font-size × 1.6 line-height = ~128px, use computed value
+    // 8em at 14px font-size × 1.6 line-height = ~112px, use computed value
     const fiveLineHeight = parseFloat(getComputedStyle(contentEl).fontSize) * 1.6 * 5;
 
     if (fullHeight > fiveLineHeight + 2) {
