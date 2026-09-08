@@ -377,7 +377,7 @@
 /* ---- Card menu ---- */
 .bookmark-card-menu {
   position: absolute;
-  top: 100%;
+  top: 28px;
   right: 0;
   margin-top: 4px;
   min-width: 100px;
@@ -443,7 +443,7 @@
 
 /* Five-line collapse */
 .collapsed-five-lines {
-  max-height: 7.5em; /* ~5 lines at 1.5 line-height */
+  max-height: 8em; /* ~5 lines at 1.6 line-height */
   overflow: hidden;
   position: relative;
 }

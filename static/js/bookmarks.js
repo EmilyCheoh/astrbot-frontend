@@ -274,11 +274,9 @@ export function openNotePopover(draft, anchorEl, starBtn) {
   // Clear input
   dom.notePopoverInput.value = "";
 
-  // Render label picker
+  // Render label picker — always reset to default for each new bookmark
   if (labelsLoaded && allLabels.length > 0) {
-    if (selectedCreateLabelId === null || !getLabelById(selectedCreateLabelId)) {
-      selectedCreateLabelId = getDefaultLabel()?.id ?? null;
-    }
+    selectedCreateLabelId = getDefaultLabel()?.id ?? null;
     renderCreateLabelPicker();
     dom.notePopoverSave.disabled = false;
   } else {
@@ -464,17 +462,20 @@ function showBookmarkDialog({ title, body, confirmText, confirmClass, onConfirm 
 
   let pending = false;
 
-  const close = () => {
-    if (pending) return;
+  const dismiss = () => {
     overlay.remove();
     if (activeBookmarkDialog === overlay) {
       activeBookmarkDialog = null;
     }
   };
 
-  cancelBtn.addEventListener("click", close);
+  const cancel = () => {
+    if (!pending) dismiss();
+  };
+
+  cancelBtn.addEventListener("click", cancel);
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) close();
+    if (e.target === overlay) cancel();
   });
 
   confirmBtn.addEventListener("click", () => {
@@ -482,7 +483,7 @@ function showBookmarkDialog({ title, body, confirmText, confirmClass, onConfirm 
     pending = true;
     cancelBtn.disabled = true;
     confirmBtn.disabled = true;
-    onConfirm(close);
+    onConfirm(dismiss);
   });
 
   btns.appendChild(cancelBtn);
@@ -956,11 +957,13 @@ function toggleCardMenu(bookmarkId) {
 
   const menu = document.createElement("div");
   menu.className = "bookmark-card-menu";
+  menu.addEventListener("click", (e) => e.stopPropagation());
 
   const editItem = document.createElement("button");
   editItem.className = "bookmark-card-menu-item";
   editItem.textContent = "Edit";
-  editItem.addEventListener("click", () => {
+  editItem.addEventListener("click", (e) => {
+    e.stopPropagation();
     closeCardMenu();
     startEdit(bookmarkId);
   });
@@ -973,15 +976,21 @@ function toggleCardMenu(bookmarkId) {
   const deleteItem = document.createElement("button");
   deleteItem.className = "bookmark-card-menu-item danger";
   deleteItem.textContent = "Delete";
-  deleteItem.addEventListener("click", () => {
+  deleteItem.addEventListener("click", (e) => {
+    e.stopPropagation();
     closeCardMenu();
     confirmDelete(bookmarkId);
   });
   menu.appendChild(deleteItem);
 
-  // Position relative to menu button
-  menuBtn.style.position = "relative";
-  menuBtn.appendChild(menu);
+  // Append to cardHeader as sibling of menuBtn (not inside menuBtn)
+  const cardHeader = card.querySelector(".bookmark-card-header");
+  if (cardHeader) {
+    cardHeader.style.position = "relative";
+    cardHeader.appendChild(menu);
+  } else {
+    card.appendChild(menu);
+  }
 }
 
 function closeCardMenu() {
@@ -1830,9 +1839,9 @@ function onLabelDeleted(data) {
     }
   }
 
-  // Sync filter
+  // Sync filter — switch to replacement so migrated bookmarks stay in view
   if (selectedLabelId === deletedId) {
-    selectedLabelId = null;
+    selectedLabelId = replacementId ?? null;
     updateFilterButton();
   }
 
