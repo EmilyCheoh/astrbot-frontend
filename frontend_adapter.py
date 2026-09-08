@@ -368,8 +368,18 @@ class FrontendAdapter(Platform):
         elif kind == "bookmark_delete":
             await self.bookmarks.handle_delete(ws, data)
 
-        elif kind == "bookmark_reorder":
-            await self.bookmarks.handle_reorder(ws, data)
+        # -- Bookmark Label CRUD (non-turn, never frozen) ----------
+        elif kind == "bookmark_label_list":
+            await self.bookmarks.handle_label_list(ws, data)
+
+        elif kind == "bookmark_label_create":
+            await self.bookmarks.handle_label_create(ws, data)
+
+        elif kind == "bookmark_label_update":
+            await self.bookmarks.handle_label_update(ws, data)
+
+        elif kind == "bookmark_label_delete":
+            await self.bookmarks.handle_label_delete(ws, data)
 
     # -- WebSocket handler ---------------------------------------------------
 

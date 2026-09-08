@@ -64,6 +64,31 @@ export function cycleFont() {
 }
 
 
+// ---- Bookmarks Font — Georgia / System (independent) ----
+
+const FONT_BOOKMARK_SERIF = 'Georgia, "Times New Roman", serif';
+const FONT_BOOKMARK_SANS  = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+export function applyBookmarksFont(mode) {
+  const isGeorgia = mode === "georgia";
+  document.documentElement.style.setProperty(
+    "--font-bookmark",
+    isGeorgia ? FONT_BOOKMARK_SERIF : FONT_BOOKMARK_SANS
+  );
+  localStorage.setItem("den-bookmarks-font", mode);
+  if (dom.bookmarksFontToggle) {
+    dom.bookmarksFontToggle.className = "icon-btn bookmarks-icon-btn " + (isGeorgia ? "serif" : "sans");
+    dom.bookmarksFontToggle.title = "Bookmarks font: " + (isGeorgia ? "Georgia" : "System");
+  }
+}
+
+export function cycleBookmarksFont() {
+  const current = localStorage.getItem("den-bookmarks-font") || "georgia";
+  applyBookmarksFont(current === "georgia" ? "system" : "georgia");
+}
+
+
 // ---- Initialize on import ----
 applyTheme(localStorage.getItem("den-theme") || "auto");
 applyFont(localStorage.getItem("den-font") || "serif");
+applyBookmarksFont(localStorage.getItem("den-bookmarks-font") || "georgia");

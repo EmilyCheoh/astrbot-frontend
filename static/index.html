@@ -171,22 +171,46 @@
     <!-- Bookmarks page overlay -->
     <div id="bookmarks-page" class="bookmarks-page hidden">
       <div class="bookmarks-header">
-        <h2>Bookmarks</h2>
+        <div class="bookmarks-header-left">
+          <button id="bookmarks-search-toggle" class="icon-btn bookmarks-icon-btn" title="Search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </button>
+          <button id="bookmarks-font-toggle" class="icon-btn bookmarks-icon-btn" title="Bookmarks font: Georgia">Aa</button>
+          <button id="bookmarks-label-mgr-btn" class="icon-btn bookmarks-icon-btn" title="Manage labels">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
+        </div>
         <button id="bookmarks-close-btn" class="bookmarks-close-btn">&times;</button>
       </div>
-      <div class="bookmarks-toolbar">
+      <!-- Collapsible search area -->
+      <div id="bookmarks-search-panel" class="bookmarks-search-panel hidden">
         <div class="bookmarks-search-row">
           <input type="text" id="bookmarks-search" placeholder="Search bookmarks..." autocomplete="off">
+        </div>
+        <div class="bookmarks-search-dates">
           <input type="date" id="bookmarks-date-from">
+          <span class="bookmarks-date-sep">&ndash;</span>
           <input type="date" id="bookmarks-date-to">
         </div>
-        <div class="bookmarks-controls-row">
-          <div class="bookmarks-sort-group">
-            <button id="bookmarks-sort-custom" class="bookmarks-sort-btn active">Custom</button>
-            <button id="bookmarks-sort-newest" class="bookmarks-sort-btn">Newest</button>
-            <button id="bookmarks-sort-oldest" class="bookmarks-sort-btn">Oldest</button>
-          </div>
-          <button id="bookmarks-group-toggle" class="bookmarks-group-toggle">Group by conversation</button>
+        <div class="bookmarks-search-actions">
+          <button id="bookmarks-search-submit" class="bookmarks-search-action-btn">Search</button>
+          <button id="bookmarks-search-clear" class="bookmarks-search-action-btn">Clear</button>
+        </div>
+        <div id="bookmarks-search-error" class="bookmarks-search-error hidden"></div>
+      </div>
+      <div class="bookmarks-controls-row">
+        <div class="bookmarks-view-group">
+          <button id="bookmarks-view-grouped" class="bookmarks-view-btn active" data-view="grouped">Grouped</button>
+          <button id="bookmarks-view-newest" class="bookmarks-view-btn" data-view="newest">Newest</button>
+          <button id="bookmarks-view-oldest" class="bookmarks-view-btn" data-view="oldest">Oldest</button>
+        </div>
+        <div class="bookmarks-label-filter-wrapper">
+          <button id="bookmarks-label-filter-btn" class="bookmarks-label-filter-btn">ALL &#9662;</button>
+          <div id="bookmarks-label-dropdown" class="bookmarks-label-dropdown hidden"></div>
         </div>
       </div>
       <div id="bookmarks-list" class="bookmarks-list"></div>
@@ -198,6 +222,7 @@
 
   <!-- Note popover -->
   <div id="note-popover" class="note-popover hidden">
+    <div id="note-popover-label-picker" class="note-popover-label-picker"></div>
     <textarea id="note-popover-input" placeholder="Add a note..." rows="2"></textarea>
     <div class="note-popover-actions">
       <button id="note-popover-cancel">Cancel</button>
@@ -212,6 +237,7 @@
   </div>
 
   <!-- JS entry point — ES module -->
+  <script type="module" src="/static/js/markdown.js"></script>
   <script type="module" src="/static/js/main.js"></script>
 </body>
 

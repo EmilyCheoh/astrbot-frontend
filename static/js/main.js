@@ -8,7 +8,7 @@
 import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { connectWS, send, stopReconnect } from "./socket.js";
-import { cycleTheme, cycleFont } from "./preferences.js";
+import { cycleTheme, cycleFont, cycleBookmarksFont } from "./preferences.js";
 import {
   appendBot, appendSystem, finalizePendingBotRow, renderHistory,
   scrollToBottom, setComposerReadonly, updateLastActions, initScrollButton,
@@ -33,12 +33,13 @@ import {
   closeBookmarksPage,
   isNotePopoverOpen,
   closeNotePopover,
-  isEditing,
-  cancelEdit,
-  isDragging,
-  cancelDrag,
+  closeTopmostBookmarkLayer,
   handleBookmarkConnectionLost,
   handleBookmarkAuthenticated,
+  toggleBookmarkSearchPanel,
+  setViewMode,
+  openLabelManager,
+  toggleLabelFilterDropdown,
 } from "./bookmarks.js";
 import { initSelectionMenu, hideSelectionMenu } from "./selection_menu.js";
 import { initQuote } from "./quote.js";
@@ -364,8 +365,11 @@ function handleMessage(data) {
     case "bookmark_create_result":
     case "bookmark_updated":
     case "bookmark_deleted":
-    case "bookmarks_reordered":
     case "bookmark_failed":
+    case "bookmark_labels_list":
+    case "bookmark_label_created":
+    case "bookmark_label_updated":
+    case "bookmark_label_deleted":
       handleBookmarkResponse(data);
       break;
   }
@@ -402,15 +406,8 @@ document.addEventListener("keydown", (e) => {
     hideSelectionMenu();
     return;
   }
-  if (isDragging()) {
-    cancelDrag();
-    return;
-  }
-  if (isEditing()) {
-    cancelEdit();
-    return;
-  }
   if (isBookmarksPageOpen()) {
+    if (closeTopmostBookmarkLayer()) return;
     closeBookmarksPage();
     return;
   }
@@ -418,6 +415,17 @@ document.addEventListener("keydown", (e) => {
     closeSearch();
     return;
   }
+});
+
+// ---- Bookmarks header buttons ----
+
+dom.bookmarksFontToggle.addEventListener("click", cycleBookmarksFont);
+dom.bookmarksSearchToggle.addEventListener("click", toggleBookmarkSearchPanel);
+dom.bookmarksLabelMgrBtn.addEventListener("click", openLabelManager);
+dom.bookmarksLabelFilterBtn.addEventListener("click", toggleLabelFilterDropdown);
+
+document.querySelectorAll(".bookmarks-view-btn").forEach(btn => {
+  btn.addEventListener("click", () => setViewMode(btn.dataset.view));
 });
 
 // ---- Init sub-modules ----

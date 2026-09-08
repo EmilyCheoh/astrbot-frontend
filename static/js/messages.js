@@ -8,23 +8,7 @@ import { dom } from "./dom.js";
 import { send, isConnected } from "./socket.js";
 import { updateComposerAvailability } from "./composer.js";
 import { openNotePopover } from "./bookmarks.js";
-
-// ---- Markdown rendering ----
-
-function renderMarkdown(text) {
-  if (!text) return "";
-  if (typeof window.marked !== "undefined" && typeof window.DOMPurify !== "undefined") {
-    const html = window.marked.parse(text, { breaks: true, gfm: true });
-    return window.DOMPurify.sanitize(html, {
-      ADD_TAGS: ["details", "summary"],
-      ADD_ATTR: ["open"],
-    });
-  }
-  // Fallback: escape HTML and convert newlines to <br>
-  const el = document.createElement("span");
-  el.textContent = text;
-  return el.innerHTML.replace(/\n/g, "<br>");
-}
+import { renderMarkdown } from "./markdown.js";
 
 // ---- Constants ----
 
