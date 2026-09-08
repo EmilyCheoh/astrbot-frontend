@@ -668,6 +668,7 @@ function getFilteredBookmarks() {
 function renderBookmarks() {
   const filtered = getFilteredBookmarks();
 
+  cleanupEditCard();
   dom.bookmarksList.innerHTML = "";
 
   if (allBookmarks.length === 0) {
