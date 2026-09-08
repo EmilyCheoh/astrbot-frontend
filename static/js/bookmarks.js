@@ -44,6 +44,7 @@ let pendingAnchor = null;
 let pendingStarBtn = null;
 let activeCreateRequestId = null;
 let labelManagerEl = null;        // DOM reference to label manager popover
+let overflowObserver = null;      // ResizeObserver for content overflow detection
 
 // ================================================================
 //  Helpers
@@ -669,6 +670,7 @@ function renderBookmarks() {
   const filtered = getFilteredBookmarks();
 
   cleanupEditCard();
+  if (overflowObserver) { overflowObserver.disconnect(); }
   dom.bookmarksList.innerHTML = "";
 
   if (allBookmarks.length === 0) {
@@ -815,46 +817,152 @@ function createBookmarkCard(bookmark) {
 
   body.appendChild(cardHeader);
 
-  // Saved text section
+  // Saved text section (no SAVED TEXT tag)
   const savedSection = document.createElement("div");
   savedSection.className = "bookmark-saved-section";
 
-  const savedTag = document.createElement("span");
-  savedTag.className = "bookmark-tag";
-  savedTag.textContent = "SAVED TEXT";
-  savedSection.appendChild(savedTag);
+  const contentWrapper = document.createElement("div");
+  contentWrapper.className = "bookmark-content-wrapper";
 
   const contentEl = document.createElement("div");
   contentEl.className = "bookmark-content collapsed-five-lines";
   contentEl.innerHTML = renderMarkdown(bookmark.content);
-  savedSection.appendChild(contentEl);
+  contentWrapper.appendChild(contentEl);
 
+  // Fade expand button — overlays bottom of collapsed content
+  const fadeExpandBtn = document.createElement("button");
+  fadeExpandBtn.type = "button";
+  fadeExpandBtn.className = "bookmark-fade-expand-button hidden";
+  fadeExpandBtn.setAttribute("aria-label", "Show more");
+  fadeExpandBtn.setAttribute("aria-expanded", "false");
+  contentWrapper.appendChild(fadeExpandBtn);
+
+  savedSection.appendChild(contentWrapper);
   body.appendChild(savedSection);
 
-  // Context section (hidden by default)
-  let contextEl = null;
+  // Context section (hidden by default, shown directly for short content)
+  let contextSection = null;
   if (bookmark.context) {
-    contextEl = document.createElement("div");
-    contextEl.className = "bookmark-context-section hidden";
+    contextSection = document.createElement("div");
+    contextSection.className = "bookmark-context-section hidden";
 
     const ctxTag = document.createElement("span");
     ctxTag.className = "bookmark-tag";
     ctxTag.textContent = "CONTEXT";
-    contextEl.appendChild(ctxTag);
+    contextSection.appendChild(ctxTag);
 
     const ctxContent = document.createElement("div");
     ctxContent.className = "bookmark-context";
     ctxContent.innerHTML = renderMarkdown(bookmark.context);
-    contextEl.appendChild(ctxContent);
+    contextSection.appendChild(ctxContent);
 
-    body.appendChild(contextEl);
+    body.appendChild(contextSection);
   }
 
-  // Expand button — determined after DOM insertion
-  const expandBtn = document.createElement("button");
-  expandBtn.className = "bookmark-expand-toggle hidden";
-  expandBtn.addEventListener("click", () => toggleCardExpanded(card));
-  body.appendChild(expandBtn);
+  // Show less button
+  const showLessBtn = document.createElement("button");
+  showLessBtn.className = "bookmark-expand-toggle hidden";
+  showLessBtn.textContent = "Show less \u25B2";
+  body.appendChild(showLessBtn);
+
+  // --- Card expansion state (closure-scoped per card) ---
+  let isOverflowing = false;
+  let isCardExpanded = false;
+
+  function syncCardExpansionState() {
+    // Edit mode: hide all expansion UI
+    if (editingId === bookmark.id) {
+      fadeExpandBtn.classList.add("hidden");
+      showLessBtn.classList.add("hidden");
+      if (contextSection) contextSection.classList.add("hidden");
+      return;
+    }
+
+    if (!isOverflowing) {
+      // Short content — show everything, no collapse
+      contentEl.classList.remove("collapsed-five-lines");
+      contentEl.style.userSelect = "";
+      contentEl.style.pointerEvents = "";
+      fadeExpandBtn.classList.add("hidden");
+      showLessBtn.classList.add("hidden");
+      if (contextSection) contextSection.classList.remove("hidden");
+      return;
+    }
+
+    // Long content
+    if (!isCardExpanded) {
+      // Collapsed
+      contentEl.classList.add("collapsed-five-lines");
+      contentEl.style.userSelect = "none";
+      contentEl.style.pointerEvents = "none";
+      fadeExpandBtn.classList.remove("hidden");
+      fadeExpandBtn.setAttribute("aria-expanded", "false");
+      showLessBtn.classList.add("hidden");
+      if (contextSection) contextSection.classList.add("hidden");
+    } else {
+      // Expanded
+      contentEl.classList.remove("collapsed-five-lines");
+      contentEl.style.userSelect = "";
+      contentEl.style.pointerEvents = "";
+      fadeExpandBtn.classList.add("hidden");
+      fadeExpandBtn.setAttribute("aria-expanded", "true");
+      showLessBtn.classList.remove("hidden");
+      if (contextSection) contextSection.classList.remove("hidden");
+    }
+  }
+
+  function measureOverflow() {
+    if (!card.isConnected) return;
+    if (editingId === bookmark.id) {
+      syncCardExpansionState();
+      return;
+    }
+
+    // Temporarily remove collapse to measure true height
+    const wasCollapsed = contentEl.classList.contains("collapsed-five-lines");
+    const prevUserSelect = contentEl.style.userSelect;
+    const prevPointerEvents = contentEl.style.pointerEvents;
+    contentEl.classList.remove("collapsed-five-lines");
+    contentEl.style.userSelect = "";
+    contentEl.style.pointerEvents = "";
+
+    const fullHeight = contentEl.scrollHeight;
+    // 8em at 14px font-size × 1.6 line-height = ~128px, use computed value
+    const fiveLineHeight = parseFloat(getComputedStyle(contentEl).fontSize) * 1.6 * 5;
+
+    if (fullHeight > fiveLineHeight + 2) {
+      isOverflowing = true;
+    } else {
+      isOverflowing = false;
+      isCardExpanded = false;
+    }
+
+    // Restore previous state before sync
+    if (wasCollapsed) {
+      contentEl.classList.add("collapsed-five-lines");
+      contentEl.style.userSelect = prevUserSelect;
+      contentEl.style.pointerEvents = prevPointerEvents;
+    }
+
+    syncCardExpansionState();
+  }
+
+  // Attach measureOverflow to contentEl for ResizeObserver callback
+  contentEl._measureBookmarkOverflow = measureOverflow;
+
+  // Click handlers
+  fadeExpandBtn.addEventListener("click", () => {
+    if (editingId === bookmark.id) return;
+    if (!isOverflowing) return;
+    isCardExpanded = true;
+    syncCardExpansionState();
+  });
+
+  showLessBtn.addEventListener("click", () => {
+    if (!isOverflowing) return;
+    isCardExpanded = false;
+    syncCardExpansionState();
+  });
 
   // Source footer
   const sourceLine = document.createElement("div");
@@ -886,53 +994,18 @@ function createBookmarkCard(bookmark) {
     activateEditUI(card, bookmark);
   }
 
-  // After DOM insertion, check overflow for expand button
+  // After DOM insertion, measure overflow and start observing
   requestAnimationFrame(() => {
     if (!card.isConnected) return;
-    // Edit mode: keep expand button hidden — edit UI handles content directly
-    if (editingId === bookmark.id) return;
+    measureOverflow();
 
-    const hasOverflow = contentEl.scrollHeight > contentEl.clientHeight + 2;
-    const hasContext = !!bookmark.context;
-
-    if (hasOverflow) {
-      expandBtn.textContent = "Show more \u25BE";
-      expandBtn.classList.remove("hidden");
-    } else if (hasContext) {
-      expandBtn.textContent = "Show context \u25BE";
-      expandBtn.classList.remove("hidden");
+    // Register with ResizeObserver
+    if (overflowObserver && contentEl.isConnected) {
+      overflowObserver.observe(contentEl);
     }
-    // else: leave hidden
   });
 
   return card;
-}
-
-function toggleCardExpanded(card) {
-  const contentEl = card.querySelector(".bookmark-content");
-  const contextSection = card.querySelector(".bookmark-context-section");
-  const expandBtn = card.querySelector(".bookmark-expand-toggle");
-  if (!contentEl || !expandBtn) return;
-
-  const isExpanded = !contentEl.classList.contains("collapsed-five-lines");
-
-  if (isExpanded) {
-    // Collapse
-    contentEl.classList.add("collapsed-five-lines");
-    if (contextSection) contextSection.classList.add("hidden");
-    // Determine label
-    const hasOverflow = contentEl.scrollHeight > contentEl.clientHeight + 2;
-    if (hasOverflow) {
-      expandBtn.textContent = "Show more \u25BE";
-    } else if (contextSection) {
-      expandBtn.textContent = "Show context \u25BE";
-    }
-  } else {
-    // Expand
-    contentEl.classList.remove("collapsed-five-lines");
-    if (contextSection) contextSection.classList.remove("hidden");
-    expandBtn.textContent = "Show less \u25B2";
-  }
 }
 
 // ================================================================
@@ -1034,7 +1107,7 @@ function activateEditUI(card, bookmark) {
 
   const body = card.querySelector(".bookmark-card-body");
 
-  // Hide rendered card header, saved section, context, expand button
+  // Hide rendered card header, saved section, context, expand/fade buttons
   const cardHeader = body.querySelector(".bookmark-card-header");
   if (cardHeader) cardHeader.classList.add("hidden");
   const savedSection = body.querySelector(".bookmark-saved-section");
@@ -1043,6 +1116,8 @@ function activateEditUI(card, bookmark) {
   if (contextSection) contextSection.classList.add("hidden");
   const expandBtn = body.querySelector(".bookmark-expand-toggle");
   if (expandBtn) expandBtn.classList.add("hidden");
+  const fadeBtn = body.querySelector(".bookmark-fade-expand-button");
+  if (fadeBtn) fadeBtn.classList.add("hidden");
 
   const sourceLine = body.querySelector(".bookmark-source");
 
@@ -2072,6 +2147,19 @@ function initBookmarks() {
       closeCardMenu();
     }
   });
+
+  // ResizeObserver for content overflow detection
+  if (typeof ResizeObserver !== "undefined") {
+    overflowObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const target = entry.target;
+        if (!target.isConnected) continue;
+        if (typeof target._measureBookmarkOverflow === "function") {
+          target._measureBookmarkOverflow();
+        }
+      }
+    });
+  }
 }
 
 initBookmarks();

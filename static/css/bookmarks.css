@@ -434,12 +434,15 @@
   margin-bottom: 8px;
 }
 
+.bookmark-content-wrapper {
+  position: relative;
+}
+
 .bookmark-content {
   word-break: break-word;
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.6;
-  margin-top: 6px;
 }
 
 .bookmark-content p { margin: 0 0 0.5em; }
@@ -449,23 +452,31 @@
 .collapsed-five-lines {
   max-height: 8em; /* ~5 lines at 1.6 line-height */
   overflow: hidden;
-  position: relative;
 }
 
-.collapsed-five-lines::after {
-  content: "";
+/* ---- Fade expand button (overlays collapsed content bottom) ---- */
+.bookmark-fade-expand-button {
   position: absolute;
-  bottom: 0;
   left: 0;
   right: 0;
-  height: 2.5em;
+  bottom: 0;
+  height: 3.2em;
+  min-height: 44px;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
   background: linear-gradient(to bottom, transparent, var(--bg-card));
-  pointer-events: none;
+  z-index: 1;
+}
+
+.bookmark-fade-expand-button.hidden {
+  display: none;
 }
 
 /* ---- Context section ---- */
 .bookmark-context-section {
-  margin-top: 8px;
+  margin-top: 12px;
 }
 
 .bookmark-context-section.hidden {
@@ -480,7 +491,7 @@
   color: var(--text-supporting);
   word-break: break-word;
   line-height: 1.5;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .bookmark-context p { margin: 0 0 0.5em; }
@@ -495,6 +506,7 @@
   font-weight: 500;
   padding: 4px 10px;
   border-radius: 6px;
+  margin-top: 12px;
   transition: background 0.12s, color 0.12s;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
