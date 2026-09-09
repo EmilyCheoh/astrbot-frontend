@@ -795,6 +795,14 @@ function createBookmarkCard(bookmark) {
     const noteText = document.createElement("span");
     noteText.className = "bookmark-note";
     noteText.textContent = bookmark.note;
+
+    noteText.addEventListener("click", () => {
+      if (editingId === bookmark.id) return;
+      if (!isOverflowing || isCardExpanded) return;
+      isCardExpanded = true;
+      syncCardExpansionState();
+    });
+
     noteLine.appendChild(noteText);
   }
 
