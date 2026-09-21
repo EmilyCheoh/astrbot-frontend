@@ -171,17 +171,20 @@ export function updateLastActions() {
 
 // ---- Append user message ----
 
-export function appendUser(text, { images = [], files = [], hasAttachment = false } = {}) {
-  const isCommand = !!(text && text.trimStart().startsWith("/"));
+export function appendUser(text, { images = [], files = [], hasAttachment = false, isCommand = null } = {}) {
+  // Explicit isCommand wins; null falls back to slash detection
+  const cmdFlag = isCommand !== null
+    ? isCommand
+    : !!(text && text.trimStart().startsWith("/"));
 
   // Only reset the accumulator for real user messages — commands
   // must not break an in-flight bot row (CoT + tool calls + reply).
-  if (!isCommand) {
+  if (!cmdFlag) {
     pendingBotRow = null;
   }
 
   const wrapper = document.createElement("div");
-  wrapper.className = "msg-row msg-row-user" + (isCommand ? " msg-row-command" : "");
+  wrapper.className = "msg-row msg-row-user" + (cmdFlag ? " msg-row-command" : "");
   wrapper.dataset.text = text;
   if (hasAttachment) wrapper.dataset.hasAttachment = "true";
 
@@ -221,7 +224,7 @@ export function appendUser(text, { images = [], files = [], hasAttachment = fals
   }
 
   // Commands: no branch index, no action bar
-  if (!isCommand) {
+  if (!cmdFlag) {
     // Branch index for user messages with text
     if (text) {
       assignBranchIndex(wrapper);
@@ -372,6 +375,43 @@ export function appendSystem(segments) {
     appendSegment(wrapper, seg);
   }
 
+  row.appendChild(wrapper);
+  dom.messages.appendChild(row);
+  scrollToBottom();
+}
+
+export function appendDenLog(content) {
+  const row = document.createElement("div");
+  row.className = "msg-row msg-row-system";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "msg-bot msg-system";
+
+  const pre = document.createElement("pre");
+  pre.className = "den-log-output";
+  pre.textContent = content;
+
+  wrapper.appendChild(pre);
+  row.appendChild(wrapper);
+  dom.messages.appendChild(row);
+
+  // Auto-scroll the log container to its bottom (newest entries visible)
+  pre.scrollTop = pre.scrollHeight;
+  scrollToBottom();
+}
+
+export function appendDenCommandError(message) {
+  const row = document.createElement("div");
+  row.className = "msg-row msg-row-system";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "msg-bot msg-system";
+
+  const div = document.createElement("div");
+  div.className = "den-command-error";
+  div.textContent = message;
+
+  wrapper.appendChild(div);
   row.appendChild(wrapper);
   dom.messages.appendChild(row);
   scrollToBottom();

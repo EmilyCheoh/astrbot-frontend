@@ -208,6 +208,14 @@ function clearPending() {
   renderImagePreview();
 }
 
+// ---- Den local command prefix detection ----
+
+function isDenCommandPrefix(text) {
+  const normalized = text.trimStart().toLowerCase();
+  return ["/show log", "/showlog", "show log", "showlog"]
+    .some((prefix) => normalized.startsWith(prefix));
+}
+
 // ---- Send message ----
 
 export function sendMessage() {
@@ -217,6 +225,20 @@ export function sendMessage() {
   const files = state.pendingFiles.slice();
   if (!text && images.length === 0 && files.length === 0) return;
   if (!isConnected()) return;
+
+  // Den local commands — intercept before anything enters AstrBot
+  if (isDenCommandPrefix(text)) {
+    if (images.length > 0 || files.length > 0) {
+      showWarning("Den commands do not support attachments.");
+      return;
+    }
+    const id = crypto.randomUUID();
+    send({ type: "den_command", id, content: text });
+    appendUser(text, { isCommand: true });
+    dom.msgInput.value = "";
+    dom.msgInput.style.height = "auto";
+    return;
+  }
 
   // Slash commands: send as-is, do not append or clear the pending quote
   const isSlash = text.startsWith("/");

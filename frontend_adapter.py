@@ -26,6 +26,7 @@ from astrbot import logger
 from .auth_guard import AuthGuard
 from .bookmark_service import BookmarkService
 from .conversation_service import ConversationService
+from .log_service import LogService
 from .media_utils import chain_to_segments
 from .message_service import MessageService
 
@@ -78,6 +79,9 @@ class FrontendAdapter(Platform):
         self.messages = MessageService(
             adapter=self, conversations=self.conversations, umo=self._umo,
         )
+
+        # Den local log viewer
+        self.logs = LogService(Path("data/logs/astrbot.log"))
 
         # -- Single-client ownership state ----------------------------------
         self._active_ws: web.WebSocketResponse | None = None
@@ -354,6 +358,10 @@ class FrontendAdapter(Platform):
 
         elif kind == "save_user_message_patch":
             await self.messages.handle_save_user_message_patch(ws, data)
+
+        # -- Den local commands (non-turn, never frozen) -------------
+        elif kind == "den_command":
+            await self.logs.handle_command(ws, data)
 
         # -- Bookmark CRUD (non-turn, never frozen) ----------------
         elif kind == "bookmark_list":

@@ -10,7 +10,8 @@ import { dom } from "./dom.js";
 import { connectWS, send, stopReconnect } from "./socket.js";
 import { cycleTheme, cycleFont, cycleBookmarksFont } from "./preferences.js";
 import {
-  appendBot, appendSystem, finalizePendingBotRow, renderHistory,
+  appendBot, appendSystem, appendDenLog, appendDenCommandError,
+  finalizePendingBotRow, renderHistory,
   scrollToBottom, setComposerReadonly, updateLastActions, initScrollButton,
   handleAssistantEditSuccess, handleAssistantEditFailure,
   handleUserPatchReady, handleUserPatchSuccess, handleUserPatchFailure,
@@ -358,6 +359,15 @@ function handleMessage(data) {
 
     case "connection_lost":
       handleBookmarkConnectionLost();
+      break;
+
+    // -- Den local command responses --
+    case "den_log":
+      appendDenLog(data.content || "No log entries found.");
+      break;
+
+    case "den_command_error":
+      appendDenCommandError(data.message || "Unable to read logs.");
       break;
 
     // -- Bookmark responses --
