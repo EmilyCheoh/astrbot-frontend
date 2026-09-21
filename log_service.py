@@ -106,7 +106,7 @@ class LogService:
         """
         path = self._log_path
         if not path.is_file():
-            return ""
+            raise FileNotFoundError("AstrBot log file not found.")
 
         size = path.stat().st_size
         if size == 0:
