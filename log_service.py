@@ -25,7 +25,7 @@ _DEFAULT_COUNT = 30
 _MIN_COUNT = 1
 _MAX_COUNT = 200
 
-_ERROR_MESSAGE = "Invalid Den command.\nUsage: show log [1\u2013200]"
+_ERROR_MESSAGE = "Invalid Den command.\nUsage: show log [query] [1\u2013200]"
 
 
 class LogService:
@@ -40,35 +40,47 @@ class LogService:
         content = data.get("content", "")
 
         try:
-            count = self._parse_show_log(content)
+            query, count = self._parse_show_log(content)
         except ValueError:
             await self._send_error(ws, req_id)
             return
 
         try:
-            log_text = await asyncio.to_thread(self._read_recent_records, count)
+            log_text = await asyncio.to_thread(
+                self._read_recent_records, count, query,
+            )
         except Exception as exc:
             logger.warning(f"Log read failed: {exc}")
             await self._send_error(ws, req_id, f"Could not read log file: {exc}")
             return
 
+        if log_text:
+            content_out = log_text
+        elif query:
+            content_out = f'No log entries matching "{query}".'
+        else:
+            content_out = "No log entries found."
+
         try:
-            await ws.send_json({
+            payload: dict = {
                 "type": "den_log",
                 "id": req_id,
-                "content": log_text or "No log entries found.",
+                "content": content_out,
                 "count": count,
-            })
+            }
+            if query:
+                payload["query"] = query
+            await ws.send_json(payload)
         except Exception:
             logger.warning("Failed to send den_log (client disconnected?).")
 
     # -- Parsing --------------------------------------------------------
 
-    def _parse_show_log(self, content: str) -> int:
-        """Parse the command text and return the requested record count.
+    def _parse_show_log(self, content: str) -> tuple[str | None, int]:
+        """Parse the command text into ``(query, limit)``.
 
-        Raises ``ValueError`` if the syntax is invalid or the count
-        is out of range.
+        *query* is ``None`` when no search term is provided.
+        Raises ``ValueError`` for invalid syntax or out-of-range count.
         """
         normalized = content.strip().lower()
 
@@ -85,22 +97,35 @@ class LogService:
         remainder = content.strip()[len(matched_prefix):].strip()
 
         if not remainder:
-            return _DEFAULT_COUNT
+            return (None, _DEFAULT_COUNT)
 
-        # Must be a bare non-negative integer with nothing else
-        if not re.fullmatch(r"\d+", remainder):
-            raise ValueError("non-integer parameter")
+        # Split from the right to isolate the potential trailing count
+        parts = remainder.rsplit(None, 1)
+        last_token = parts[-1]
 
-        count = int(remainder)
-        if count < _MIN_COUNT or count > _MAX_COUNT:
-            raise ValueError(f"count {count} out of range")
+        # Pure integer → treat as limit
+        if re.fullmatch(r"\d+", last_token):
+            count = int(last_token)
+            if count < _MIN_COUNT or count > _MAX_COUNT:
+                raise ValueError(f"count {count} out of range")
+            query = parts[0].strip() if len(parts) > 1 else None
+            return (query or None, count)
 
-        return count
+        # Numeric-looking but not a valid integer (e.g. 1.5, -3) → error
+        if re.fullmatch(r"-?[\d.]+", last_token):
+            raise ValueError("invalid numeric parameter")
+
+        # Non-numeric → entire remainder is the search query
+        return (remainder, _DEFAULT_COUNT)
 
     # -- Log reading ----------------------------------------------------
 
-    def _read_recent_records(self, limit: int) -> str:
+    def _read_recent_records(self, limit: int, query: str | None = None) -> str:
         """Synchronous tail-read of the log file, split into complete records.
+
+        When *query* is provided, only records whose full text (including
+        traceback / continuation lines) contains *query* are kept.  The
+        match uses ``casefold()`` for case-insensitive comparison.
 
         Called via ``asyncio.to_thread`` to avoid blocking the event loop.
         """
@@ -140,6 +165,11 @@ class LogService:
         # Discard the first (potentially truncated) record when read from mid-file
         if started_mid_file and records:
             records = records[1:]
+
+        # Filter by query (casefold for case-insensitive containment)
+        if query:
+            q = query.casefold()
+            records = [r for r in records if q in r.casefold()]
 
         # Return the last `limit` records, oldest first
         return "\n".join(records[-limit:]).strip()

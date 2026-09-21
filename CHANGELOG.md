@@ -1,4 +1,4 @@
-Show log
+Show log - (now can query)
 
 ---
 
