@@ -465,7 +465,7 @@ class MessageService:
                 )
                 return
 
-            visible = self._conversations._extract_branch_text(candidate)
+            visible = self._conversations.extract_branch_text(candidate)
             if not visible or visible.lstrip().startswith("/"):
                 await self._send_user_patch_failed(
                     ws, conversation_id, "invalid_content",

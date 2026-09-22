@@ -34,6 +34,9 @@ class ConversationService:
     def data_dir(self) -> Path:
         return self._core.data_dir
 
+    def find_db(self) -> str | None:
+        return self._core.find_db()
+
     # -- Forwarded to branch module --------------------------------------------
 
     def resolve_patch_target(
@@ -45,6 +48,9 @@ class ConversationService:
         return self._branches.resolve_patch_target(
             history, branch_index, expected_role,
         )
+
+    def extract_branch_text(self, message: dict) -> str:
+        return self._branches._extract_branch_text(message)
 
     async def handle_branch(self, ws: web.WebSocketResponse, data: dict):
         await self._branches.handle_branch(ws, data)
