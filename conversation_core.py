@@ -12,8 +12,6 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-from astrbot import logger
-
 from . import runtime
 
 
