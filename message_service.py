@@ -210,7 +210,7 @@ class MessageService:
             {"content": content, "id": str(uuid.uuid4())}, ws, turn_token,
         )
 
-    # -- Edit assistant reply (no LLM re-fire) --------------------------------
+    # -- Shared patch helpers --------------------------------------------------
 
     @staticmethod
     def _extract_assistant_text(message: dict) -> str:
@@ -225,168 +225,6 @@ class MessageService:
                 if isinstance(block, dict) and block.get("type") == "text"
             )
         return ""
-
-    async def handle_edit_assistant_message(
-        self,
-        ws: web.WebSocketResponse,
-        conversation_id: str,
-        new_text: str,
-        original_content: str,
-    ):
-        """Replace the visible text of the last assistant reply in history.
-
-        Does NOT trigger a new LLM response — purely a manual correction.
-        """
-        new_text = new_text.strip()
-        if not new_text:
-            await self._send_edit_failed(ws, conversation_id)
-            return
-
-        try:
-            if not runtime.conversation_manager:
-                logger.warning("Conversation manager not available for assistant edit")
-                await self._send_edit_failed(ws, conversation_id)
-                return
-
-            # Verify conversation ID matches the active one
-            cid = await runtime.conversation_manager.get_curr_conversation_id(
-                self._umo
-            )
-            if not cid or cid != conversation_id:
-                logger.warning("Assistant edit: conversation ID mismatch")
-                await self._send_edit_failed(ws, conversation_id)
-                return
-
-            # Load history (read-only SQLite, same pattern as _truncate)
-            db_path = self._conversations.find_db()
-            if not db_path:
-                await self._send_edit_failed(ws, conversation_id)
-                return
-
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-            cursor = conn.execute(
-                "SELECT content FROM conversations WHERE conversation_id = ?",
-                (cid,),
-            )
-            row = cursor.fetchone()
-            conn.close()
-
-            if not row or not row[0]:
-                await self._send_edit_failed(ws, conversation_id)
-                return
-
-            history = json.loads(row[0])
-
-            # Find last user message index
-            last_user_idx = None
-            for i in range(len(history) - 1, -1, -1):
-                if history[i].get("role") == "user":
-                    last_user_idx = i
-                    break
-
-            if last_user_idx is None:
-                await self._send_edit_failed(ws, conversation_id)
-                return
-
-            # Reject if the current turn contains tool activity
-            turn_has_tool_activity = any(
-                isinstance(message, dict)
-                and (
-                    message.get("role") == "tool"
-                    or bool(message.get("tool_calls"))
-                )
-                for message in history[last_user_idx + 1 :]
-            )
-            if turn_has_tool_activity:
-                logger.warning(
-                    "Assistant edit rejected: current reply contains tool activity"
-                )
-                await self._send_edit_failed(ws, conversation_id)
-                return
-
-            # Find last assistant with visible text AFTER last user message
-            target_idx = None
-            for i in range(len(history) - 1, last_user_idx, -1):
-                msg = history[i]
-                if msg.get("role") != "assistant":
-                    continue
-                visible = self._extract_assistant_text(msg)
-                if visible.strip():
-                    target_idx = i
-                    break
-
-            if target_idx is None:
-                await self._send_edit_failed(ws, conversation_id)
-                return
-
-            # Verify original content matches what's in the DB
-            stored_text = self._extract_assistant_text(history[target_idx])
-            if stored_text.strip() != original_content.strip():
-                logger.warning(
-                    "Assistant edit: original content mismatch "
-                    "(screen vs DB out of sync)"
-                )
-                await self._send_edit_failed(ws, conversation_id)
-                return
-
-            # Replace text content, preserving think blocks and tool records
-            target = history[target_idx]
-            target_content = target.get("content")
-
-            if isinstance(target_content, str):
-                target["content"] = new_text
-            elif isinstance(target_content, list):
-                updated_blocks = []
-                text_replaced = False
-                for block in target_content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        if not text_replaced:
-                            updated_block = dict(block)
-                            updated_block["text"] = new_text
-                            updated_blocks.append(updated_block)
-                            text_replaced = True
-                    else:
-                        updated_blocks.append(block)
-
-                if not text_replaced:
-                    await self._send_edit_failed(ws, conversation_id)
-                    return
-
-                target["content"] = updated_blocks
-            else:
-                await self._send_edit_failed(ws, conversation_id)
-                return
-
-            # Save via conversation_manager
-            await runtime.conversation_manager.update_conversation(
-                self._umo, cid, history=history,
-            )
-
-            logger.info(f"Assistant reply edited in conversation {cid}")
-
-            await ws.send_json({
-                "type": "assistant_message_edited",
-                "conversation_id": conversation_id,
-                "message_index": target_idx,
-                "message": history[target_idx],
-            })
-
-        except Exception as exc:
-            logger.warning(f"Failed to edit assistant message: {exc}")
-            await self._send_edit_failed(ws, conversation_id)
-
-    @staticmethod
-    async def _send_edit_failed(ws: web.WebSocketResponse, conversation_id: str):
-        """Send an edit-failed response."""
-        try:
-            await ws.send_json({
-                "type": "assistant_message_edit_failed",
-                "conversation_id": conversation_id,
-            })
-        except Exception:
-            pass
-
-    # -- User message patch (no LLM re-fire) --------------------------------
 
     @staticmethod
     def _message_revision(message: dict) -> str:
@@ -426,47 +264,47 @@ class MessageService:
         return history, active_cid
 
     @staticmethod
-    def _find_last_user_patch_target(history: list[dict]):
-        """Locate the last user message and its first text block."""
-        for message_index in range(len(history) - 1, -1, -1):
-            message = history[message_index]
-            if not isinstance(message, dict) or message.get("role") != "user":
-                continue
+    def _extract_text_block(message: dict):
+        """Extract the first text block from a message.
 
-            content = message.get("content")
+        Returns ``(block_index, content_kind, raw_text)`` or ``None``.
+        """
+        content = message.get("content")
 
-            if isinstance(content, str):
-                return message_index, None, "string", content
+        if isinstance(content, str):
+            return None, "string", content
 
-            if isinstance(content, list):
-                for block_index, block in enumerate(content):
-                    if (
-                        isinstance(block, dict)
-                        and block.get("type") == "text"
-                        and isinstance(block.get("text"), str)
-                    ):
-                        return (
-                            message_index,
-                            block_index,
-                            "list",
-                            block["text"],
-                        )
-
-            return None
+        if isinstance(content, list):
+            for block_index, block in enumerate(content):
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "text"
+                    and isinstance(block.get("text"), str)
+                ):
+                    return block_index, "list", block["text"]
 
         return None
+
+    # -- User message patch (no LLM re-fire) --------------------------------
 
     async def handle_prepare_user_message_patch(
         self,
         ws: web.WebSocketResponse,
         conversation_id: str,
+        branch_index: int,
+        expected_role: str,
         display_content: str,
     ):
-        """Prepare a user message patch by returning the stored raw text."""
+        """Prepare a user message patch by returning the stored raw text.
+
+        Uses *branch_index* to resolve the exact target message via the
+        shared branch-point mapping, allowing patches on any eligible
+        user message — not only the last one.
+        """
         display_content = display_content.strip()
-        if not display_content:
+        if not display_content or expected_role != "user":
             await self._send_user_patch_failed(
-                ws, conversation_id, "content_mismatch"
+                ws, conversation_id, "content_mismatch",
             )
             return
 
@@ -474,24 +312,35 @@ class MessageService:
             loaded = await self._load_active_history(conversation_id)
             if not loaded:
                 await self._send_user_patch_failed(
-                    ws, conversation_id, "conversation_mismatch"
+                    ws, conversation_id, "conversation_mismatch",
                 )
                 return
 
             history, _ = loaded
-            target = self._find_last_user_patch_target(history)
-            if not target:
+
+            point = self._conversations.resolve_patch_target(
+                history, branch_index, expected_role,
+            )
+            if not point:
                 await self._send_user_patch_failed(
-                    ws, conversation_id, "message_not_found"
+                    ws, conversation_id, "message_not_found",
                 )
                 return
 
-            message_index, block_index, content_kind, raw_text = target
+            message_index = point["message_index"]
+            result = self._extract_text_block(history[message_index])
+            if not result:
+                await self._send_user_patch_failed(
+                    ws, conversation_id, "message_not_found",
+                )
+                return
+
+            block_index, content_kind, raw_text = result
 
             # Verify the bubble text appears in the stored message
             if display_content not in raw_text:
                 await self._send_user_patch_failed(
-                    ws, conversation_id, "content_mismatch"
+                    ws, conversation_id, "content_mismatch",
                 )
                 return
 
@@ -503,14 +352,14 @@ class MessageService:
                 "content_kind": content_kind,
                 "raw_text": raw_text,
                 "revision": self._message_revision(
-                    history[message_index]
+                    history[message_index],
                 ),
             })
 
         except Exception as exc:
             logger.warning(f"Failed to prepare user message patch: {exc}")
             await self._send_user_patch_failed(
-                ws, conversation_id, "message_not_found"
+                ws, conversation_id, "message_not_found",
             )
 
     async def handle_save_user_message_patch(
@@ -530,37 +379,56 @@ class MessageService:
             loaded = await self._load_active_history(conversation_id)
             if not loaded:
                 await self._send_user_patch_failed(
-                    ws, conversation_id, "conversation_mismatch"
+                    ws, conversation_id, "conversation_mismatch",
                 )
                 return
 
             history, cid = loaded
-            target = self._find_last_user_patch_target(history)
-            if not target:
+
+            # Validate target
+            if (
+                not isinstance(message_index, int)
+                or message_index < 0
+                or message_index >= len(history)
+            ):
                 await self._send_user_patch_failed(
-                    ws, conversation_id, "message_not_found"
+                    ws, conversation_id, "message_not_found",
                 )
                 return
 
-            current_idx, current_block, current_kind, _ = target
-
-            if (
-                current_idx != message_index
-                or current_block != block_index
-                or current_kind != content_kind
-                or self._message_revision(history[message_index]) != revision
-            ):
+            target_message = history[message_index]
+            if target_message.get("role") != "user":
                 await self._send_user_patch_failed(
-                    ws, conversation_id, "message_changed"
+                    ws, conversation_id, "message_not_found",
+                )
+                return
+
+            # Revision check
+            if self._message_revision(target_message) != revision:
+                await self._send_user_patch_failed(
+                    ws, conversation_id, "message_changed",
                 )
                 return
 
             # Apply the edit
-            target_message = history[message_index]
             if content_kind == "string":
                 target_message["content"] = edited_raw_text
+            elif content_kind == "list" and isinstance(block_index, int):
+                content = target_message.get("content")
+                if (
+                    not isinstance(content, list)
+                    or block_index >= len(content)
+                ):
+                    await self._send_user_patch_failed(
+                        ws, conversation_id, "message_changed",
+                    )
+                    return
+                content[block_index]["text"] = edited_raw_text
             else:
-                target_message["content"][block_index]["text"] = edited_raw_text
+                await self._send_user_patch_failed(
+                    ws, conversation_id, "message_changed",
+                )
+                return
 
             await runtime.conversation_manager.update_conversation(
                 self._umo, cid, history=history,
@@ -578,7 +446,7 @@ class MessageService:
         except Exception as exc:
             logger.warning(f"Failed to save user message patch: {exc}")
             await self._send_user_patch_failed(
-                ws, conversation_id, "message_changed"
+                ws, conversation_id, "message_changed",
             )
 
     @staticmethod
@@ -587,10 +455,219 @@ class MessageService:
         conversation_id: str,
         reason: str,
     ):
-        """Send a patch-failed response."""
+        """Send a user-patch-failed response."""
         try:
             await ws.send_json({
                 "type": "user_message_patch_failed",
+                "conversation_id": conversation_id,
+                "reason": reason,
+            })
+        except Exception:
+            pass
+
+    # -- Assistant message patch (no LLM re-fire) ----------------------------
+
+    async def handle_prepare_assistant_message_patch(
+        self,
+        ws: web.WebSocketResponse,
+        conversation_id: str,
+        branch_index: int,
+        expected_role: str,
+        display_content: str,
+    ):
+        """Prepare an assistant message patch.
+
+        Uses *branch_index* to resolve the exact target, verifies it has
+        no tool calls, and returns the stored visible text + revision.
+        """
+        if expected_role != "assistant":
+            await self._send_assistant_patch_failed(
+                ws, conversation_id, "content_mismatch",
+            )
+            return
+
+        try:
+            loaded = await self._load_active_history(conversation_id)
+            if not loaded:
+                await self._send_assistant_patch_failed(
+                    ws, conversation_id, "conversation_mismatch",
+                )
+                return
+
+            history, _ = loaded
+
+            point = self._conversations.resolve_patch_target(
+                history, branch_index, expected_role,
+            )
+            if not point:
+                await self._send_assistant_patch_failed(
+                    ws, conversation_id, "message_not_found",
+                )
+                return
+
+            message_index = point["message_index"]
+            message = history[message_index]
+
+            # Reject tool-call messages
+            if bool(message.get("tool_calls")):
+                await self._send_assistant_patch_failed(
+                    ws, conversation_id, "has_tool_calls",
+                )
+                return
+
+            raw_text = self._extract_assistant_text(message)
+            if not raw_text.strip():
+                await self._send_assistant_patch_failed(
+                    ws, conversation_id, "message_not_found",
+                )
+                return
+
+            # Verify display content (substring check — frontend strips timestamps)
+            display_content = (display_content or "").strip()
+            if display_content and display_content not in raw_text:
+                await self._send_assistant_patch_failed(
+                    ws, conversation_id, "content_mismatch",
+                )
+                return
+
+            await ws.send_json({
+                "type": "assistant_message_patch_ready",
+                "conversation_id": conversation_id,
+                "message_index": message_index,
+                "raw_text": raw_text,
+                "revision": self._message_revision(message),
+            })
+
+        except Exception as exc:
+            logger.warning(f"Failed to prepare assistant message patch: {exc}")
+            await self._send_assistant_patch_failed(
+                ws, conversation_id, "message_not_found",
+            )
+
+    async def handle_save_assistant_message_patch(
+        self,
+        ws: web.WebSocketResponse,
+        data: dict,
+    ):
+        """Save a patched assistant message without triggering LLM response.
+
+        Preserves thinking blocks and tool-call records.  Multiple text
+        blocks are merged into one (first text block receives the new
+        text, subsequent text blocks are dropped).
+        """
+        conversation_id = data.get("conversation_id", "")
+        message_index = data.get("message_index")
+        edited_text = data.get("raw_text", "").strip()
+        revision = data.get("revision", "")
+
+        if not edited_text:
+            await self._send_assistant_patch_failed(
+                ws, conversation_id, "empty_content",
+            )
+            return
+
+        try:
+            loaded = await self._load_active_history(conversation_id)
+            if not loaded:
+                await self._send_assistant_patch_failed(
+                    ws, conversation_id, "conversation_mismatch",
+                )
+                return
+
+            history, cid = loaded
+
+            # Validate target
+            if (
+                not isinstance(message_index, int)
+                or message_index < 0
+                or message_index >= len(history)
+            ):
+                await self._send_assistant_patch_failed(
+                    ws, conversation_id, "message_not_found",
+                )
+                return
+
+            target = history[message_index]
+            if target.get("role") != "assistant":
+                await self._send_assistant_patch_failed(
+                    ws, conversation_id, "message_not_found",
+                )
+                return
+
+            if bool(target.get("tool_calls")):
+                await self._send_assistant_patch_failed(
+                    ws, conversation_id, "has_tool_calls",
+                )
+                return
+
+            # Revision check
+            if self._message_revision(target) != revision:
+                await self._send_assistant_patch_failed(
+                    ws, conversation_id, "message_changed",
+                )
+                return
+
+            # Apply the edit
+            target_content = target.get("content")
+
+            if isinstance(target_content, str):
+                target["content"] = edited_text
+            elif isinstance(target_content, list):
+                updated_blocks = []
+                text_replaced = False
+                for block in target_content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        if not text_replaced:
+                            updated_block = dict(block)
+                            updated_block["text"] = edited_text
+                            updated_blocks.append(updated_block)
+                            text_replaced = True
+                        # Drop subsequent text blocks (merge into one)
+                    else:
+                        updated_blocks.append(block)
+
+                if not text_replaced:
+                    await self._send_assistant_patch_failed(
+                        ws, conversation_id, "message_not_found",
+                    )
+                    return
+
+                target["content"] = updated_blocks
+            else:
+                await self._send_assistant_patch_failed(
+                    ws, conversation_id, "message_not_found",
+                )
+                return
+
+            await runtime.conversation_manager.update_conversation(
+                self._umo, cid, history=history,
+            )
+
+            logger.info(f"Assistant message patched in conversation {cid}")
+
+            await ws.send_json({
+                "type": "assistant_message_patched",
+                "conversation_id": conversation_id,
+                "message_index": message_index,
+                "message": history[message_index],
+            })
+
+        except Exception as exc:
+            logger.warning(f"Failed to save assistant message patch: {exc}")
+            await self._send_assistant_patch_failed(
+                ws, conversation_id, "message_changed",
+            )
+
+    @staticmethod
+    async def _send_assistant_patch_failed(
+        ws: web.WebSocketResponse,
+        conversation_id: str,
+        reason: str,
+    ):
+        """Send an assistant-patch-failed response."""
+        try:
+            await ws.send_json({
+                "type": "assistant_message_patch_failed",
                 "conversation_id": conversation_id,
                 "reason": reason,
             })

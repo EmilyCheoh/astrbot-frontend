@@ -13,9 +13,9 @@ import {
   appendBot, appendSystem, appendDenLog, appendDenCommandError,
   finalizePendingBotRow, renderHistory,
   scrollToBottom, setComposerReadonly, updateLastActions, initScrollButton,
-  handleAssistantEditSuccess, handleAssistantEditFailure,
+  handleAssistantPatchReady, handleAssistantPatchSuccess, handleAssistantPatchFailure,
   handleUserPatchReady, handleUserPatchSuccess, handleUserPatchFailure,
-  resetUserPatchState,
+  resetPatchState, isPatchConfirmOpen, closePatchConfirm,
 } from "./messages.js";
 import {
   sendMessage, initComposer, updateComposerAvailability,
@@ -184,7 +184,7 @@ function handleMessage(data) {
       state.isProcessing = false;
       state.isBranching = false;
       dom.thinkingIndicator.classList.add("hidden");
-      resetUserPatchState();
+      resetPatchState();
       state.currentConversationId = data.conversation_id || null;
       state.currentPlatformId = data.platform_id || "";
       state.pendingConversationId = null;
@@ -258,7 +258,7 @@ function handleMessage(data) {
 
     case "conversation_created":
       state.isBranching = false;
-      resetUserPatchState();
+      resetPatchState();
       state.currentConversationId = data.conversation_id || null;
       state.currentPlatformId = data.platform_id || "";
       state.pendingConversationId = null;
@@ -274,7 +274,7 @@ function handleMessage(data) {
 
     case "conversation_branched": {
       state.isBranching = false;
-      resetUserPatchState();
+      resetPatchState();
 
       state.currentConversationId = data.conversation_id || null;
       state.currentPlatformId = data.platform_id || "";
@@ -328,12 +328,16 @@ function handleMessage(data) {
       break;
     }
 
-    case "assistant_message_edited":
-      handleAssistantEditSuccess(data);
+    case "assistant_message_patch_ready":
+      handleAssistantPatchReady(data);
       break;
 
-    case "assistant_message_edit_failed":
-      handleAssistantEditFailure();
+    case "assistant_message_patched":
+      handleAssistantPatchSuccess(data);
+      break;
+
+    case "assistant_message_patch_failed":
+      handleAssistantPatchFailure();
       break;
 
     case "user_message_patch_ready":
@@ -423,6 +427,10 @@ document.addEventListener("keydown", (e) => {
   }
   if (!dom.searchOverlay.classList.contains("hidden")) {
     closeSearch();
+    return;
+  }
+  if (isPatchConfirmOpen()) {
+    closePatchConfirm();
     return;
   }
 });

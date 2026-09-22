@@ -453,7 +453,7 @@ export function finalizePendingBotRow() {
       ? [{ icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" }]
       : []),
     ...(plainText && !hasToolCall
-      ? [{ icon: ICON_PATCH, title: "Edit response", onClick: () => handleAssistantEditClick(row), className: "edit-btn" }]
+      ? [{ icon: ICON_PATCH, title: "Edit response", onClick: () => handleAssistantPatchClick(row), className: "patch-btn" }]
       : []),
     ...(branchable
       ? [{ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" }]
@@ -710,196 +710,74 @@ function handleEditClick(userRow) {
   });
 }
 
-// ---- Assistant edit (no LLM re-fire) ----
+// ---- Patch: shared state and helpers ----
 
-let pendingAssistantEdit = null;
+let pendingPatchConfirm = null; // { row, bar }
+let pendingUserPatch = null;
+let pendingAssistantPatch = null;
 
-function handleAssistantEditClick(botRow) {
-  if (state.isProcessing || state.isReadonly || !botRow.classList.contains("is-last")) return;
-  if (botRow.querySelector(".bot-edit-area")) return;
+function closePatchConfirmInner() {
+  if (!pendingPatchConfirm) return;
+  pendingPatchConfirm.bar.remove();
+  pendingPatchConfirm = null;
+}
 
-  const wrapper = botRow.querySelector(".msg-bot");
-  const textBlocks = wrapper.querySelectorAll(".msg-bot-text");
-  const actionsBar = botRow.querySelector(".msg-actions") || wrapper.querySelector(".msg-actions");
-  const originalText = botRow.dataset.text || "";
+export function isPatchConfirmOpen() {
+  return pendingPatchConfirm !== null;
+}
 
-  // Hide text blocks and action bar
-  textBlocks.forEach((block) => block.classList.add("hidden"));
-  if (actionsBar) actionsBar.classList.add("hidden");
+export function closePatchConfirm() {
+  closePatchConfirmInner();
+}
 
-  const editArea = document.createElement("div");
-  editArea.className = "edit-area bot-edit-area";
+function showPatchConfirm(row, role, branchIndex, displayText) {
+  closePatchConfirmInner();
 
-  const textarea = document.createElement("textarea");
-  textarea.className = "edit-textarea";
-  textarea.value = originalText;
+  const bar = document.createElement("div");
+  bar.className = "patch-confirm";
+  bar.innerHTML =
+    '<span class="patch-confirm-text">This may invalidate cached context and increase API cost. Continue?</span>' +
+    '<div class="patch-confirm-btns">' +
+    '<button class="patch-confirm-cancel">Cancel</button>' +
+    '<button class="patch-confirm-ok">Continue</button>' +
+    "</div>";
 
-  const btnRow = document.createElement("div");
-  btnRow.className = "edit-btns";
-
-  const cancelBtn = document.createElement("button");
-  cancelBtn.className = "edit-cancel-btn";
-  cancelBtn.textContent = "Cancel";
-
-  const confirmBtn = document.createElement("button");
-  confirmBtn.className = "edit-send-btn";
-  confirmBtn.textContent = "Confirm";
-  confirmBtn.disabled = !originalText.trim();
-
-  function closeBotEdit() {
-    // Block ESC/Cancel while waiting for backend save
-    if (pendingAssistantEdit?.editArea === editArea) {
-      return;
-    }
-
-    editArea.remove();
-    textBlocks.forEach((block) => block.classList.remove("hidden"));
-    if (actionsBar) actionsBar.classList.remove("hidden");
-    pendingAssistantEdit = null;
-  }
-
-  function updateConfirmAvailability() {
-    confirmBtn.disabled = !textarea.value.trim();
-  }
-
-  cancelBtn.addEventListener("click", closeBotEdit);
-
-  confirmBtn.addEventListener("click", () => {
-    const newText = textarea.value.trim();
-    if (!newText || !isConnected()) return;
-
-    // Clear previous error if retrying
-    editArea.querySelector(".bot-edit-error")?.remove();
-
-    // Keep edit area visible until backend confirms
-    confirmBtn.disabled = true;
-    cancelBtn.disabled = true;
-    pendingAssistantEdit = { botRow, editArea, textBlocks, actionsBar };
-
-    send({
-      type: "edit_assistant_message",
-      conversation_id: state.currentConversationId,
-      original_content: originalText,
-      content: newText,
-    });
-  });
-
-  textarea.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      closeBotEdit();
+  bar.querySelector(".patch-confirm-cancel").addEventListener("click", closePatchConfirmInner);
+  bar.querySelector(".patch-confirm-ok").addEventListener("click", () => {
+    closePatchConfirmInner();
+    if (role === "user") {
+      startUserPatchPrepare(row, branchIndex, displayText);
+    } else {
+      startAssistantPatchPrepare(row, branchIndex, displayText);
     }
   });
 
-  textarea.addEventListener("input", () => {
-    updateConfirmAvailability();
-    textarea.style.height = "auto";
-    textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
-  });
-
-  btnRow.appendChild(cancelBtn);
-  btnRow.appendChild(confirmBtn);
-  editArea.appendChild(textarea);
-  editArea.appendChild(btnRow);
-
-  // Insert edit area after the last text block (before tool calls if any)
-  const lastTextBlock = textBlocks.length > 0 ? textBlocks[textBlocks.length - 1] : null;
-  if (lastTextBlock && lastTextBlock.nextSibling) {
-    wrapper.insertBefore(editArea, lastTextBlock.nextSibling);
-  } else {
-    wrapper.appendChild(editArea);
-  }
-
-  requestAnimationFrame(() => {
-    textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
-    textarea.focus();
-  });
-}
-
-export function handleAssistantEditSuccess(data) {
-  const edit = pendingAssistantEdit;
-  if (!edit) return;
-
-  const { botRow, editArea, textBlocks, actionsBar } = edit;
-
-  // Extract visible text from the authoritative backend message
-  const msg = data.message || {};
-  let editedText = "";
-  if (typeof msg.content === "string") {
-    editedText = msg.content;
-  } else if (Array.isArray(msg.content)) {
-    editedText = msg.content
-      .filter((b) => b && b.type === "text")
-      .map((b) => b.text || "")
-      .join("");
-  }
-
-  // Remove old text blocks
-  textBlocks.forEach((block) => block.remove());
-
-  // Render new text through markdown + DOMPurify
-  const newContent = document.createElement("div");
-  newContent.className = "msg-bot-text";
-  newContent.innerHTML = renderMarkdown(editedText);
-
-  // Insert where the edit area is, then remove edit area
-  editArea.parentNode.insertBefore(newContent, editArea);
-  editArea.remove();
-
-  // Update stored text
-  botRow.dataset.text = editedText;
-
-  // Update in-memory history
-  if (data.message_index != null && state.currentMessages[data.message_index]) {
-    state.currentMessages[data.message_index] = data.message;
-  }
-
-  // Restore action bar
-  if (actionsBar) actionsBar.classList.remove("hidden");
-
-  pendingAssistantEdit = null;
-}
-
-export function handleAssistantEditFailure() {
-  const edit = pendingAssistantEdit;
-  if (!edit) return;
-
-  // Re-enable buttons so the user can try again or cancel
-  const confirmBtn = edit.editArea.querySelector(".edit-send-btn");
-  const cancelBtn = edit.editArea.querySelector(".edit-cancel-btn");
-  if (confirmBtn) confirmBtn.disabled = false;
-  if (cancelBtn) cancelBtn.disabled = false;
-
-  // Show inline error hint
-  let errorText = edit.editArea.querySelector(".bot-edit-error");
-  if (!errorText) {
-    errorText = document.createElement("div");
-    errorText.className = "bot-edit-error";
-    errorText.textContent = "Couldn't save the edit.";
-    const btnRow = edit.editArea.querySelector(".edit-btns");
-    edit.editArea.insertBefore(errorText, btnRow);
-  }
-
-  pendingAssistantEdit = null;
+  row.appendChild(bar);
+  pendingPatchConfirm = { row, bar };
 }
 
 // ---- User message patch (no LLM re-fire) ----
 
-let pendingUserPatch = null;
-
 function handleUserPatchClick(userRow) {
-  if (
-    state.isProcessing
-    || state.isReadonly
-    || !userRow.classList.contains("is-last")
-    || pendingUserPatch
-    || !isConnected()
-  ) return;
+  if (state.isProcessing || state.isReadonly || !isConnected()) return;
+  if (pendingUserPatch || pendingAssistantPatch) return;
+
+  const branchIndex = Number(userRow.dataset.branchIndex);
+  if (!Number.isInteger(branchIndex)) return;
 
   const displayContent = userRow.dataset.text || "";
   if (displayContent.trimStart().startsWith("/")) return;
 
+  closePatchConfirmInner();
+
+  if (userRow.classList.contains("is-last")) {
+    startUserPatchPrepare(userRow, branchIndex, displayContent);
+  } else {
+    showPatchConfirm(userRow, "user", branchIndex, displayContent);
+  }
+}
+
+function startUserPatchPrepare(userRow, branchIndex, displayContent) {
   const patchBtn = userRow.querySelector(".patch-btn");
   if (patchBtn) patchBtn.disabled = true;
 
@@ -908,12 +786,15 @@ function handleUserPatchClick(userRow) {
     conversationId: state.currentConversationId,
     userRow,
     patchBtn,
+    branchIndex,
     displayContent,
   };
 
   send({
     type: "prepare_user_message_patch",
     conversation_id: state.currentConversationId,
+    branch_index: branchIndex,
+    expected_role: "user",
     display_content: displayContent,
   });
 }
@@ -1029,10 +910,6 @@ export function handleUserPatchReady(data) {
   });
 }
 
-export function resetUserPatchState() {
-  pendingUserPatch = null;
-}
-
 export function handleUserPatchSuccess(data) {
   if (!pendingUserPatch) return;
 
@@ -1090,6 +967,239 @@ export function handleUserPatchFailure(data) {
     const btnRowEl = pendingUserPatch.editArea.querySelector(".edit-btns");
     pendingUserPatch.editArea.insertBefore(errorEl, btnRowEl);
   }
+}
+
+// ---- Assistant message patch (no LLM re-fire) ----
+
+function handleAssistantPatchClick(botRow) {
+  if (state.isProcessing || state.isReadonly || !isConnected()) return;
+  if (pendingUserPatch || pendingAssistantPatch) return;
+
+  const branchIndex = Number(botRow.dataset.branchIndex);
+  if (!Number.isInteger(branchIndex)) return;
+
+  closePatchConfirmInner();
+
+  if (botRow.classList.contains("is-last")) {
+    startAssistantPatchPrepare(botRow, branchIndex, botRow.dataset.text || "");
+  } else {
+    showPatchConfirm(botRow, "assistant", branchIndex, botRow.dataset.text || "");
+  }
+}
+
+function startAssistantPatchPrepare(botRow, branchIndex, displayText) {
+  const patchBtn = botRow.querySelector(".patch-btn");
+  if (patchBtn) patchBtn.disabled = true;
+
+  pendingAssistantPatch = {
+    phase: "preparing",
+    conversationId: state.currentConversationId,
+    botRow,
+    patchBtn,
+    branchIndex,
+    displayText,
+  };
+
+  send({
+    type: "prepare_assistant_message_patch",
+    conversation_id: state.currentConversationId,
+    branch_index: branchIndex,
+    expected_role: "assistant",
+    display_content: displayText,
+  });
+}
+
+export function handleAssistantPatchReady(data) {
+  if (!pendingAssistantPatch || pendingAssistantPatch.phase !== "preparing") return;
+  if (data.conversation_id !== state.currentConversationId) {
+    if (pendingAssistantPatch.patchBtn) pendingAssistantPatch.patchBtn.disabled = false;
+    pendingAssistantPatch = null;
+    return;
+  }
+
+  const { botRow } = pendingAssistantPatch;
+  const wrapper = botRow.querySelector(".msg-bot");
+  const textBlocks = wrapper.querySelectorAll(".msg-bot-text");
+  const actionsBar = botRow.querySelector(".msg-actions") || wrapper.querySelector(".msg-actions");
+
+  textBlocks.forEach((block) => block.classList.add("hidden"));
+  if (actionsBar) actionsBar.classList.add("hidden");
+
+  pendingAssistantPatch.phase = "editing";
+  pendingAssistantPatch.originalRawText = data.raw_text;
+  pendingAssistantPatch.messageIndex = data.message_index;
+  pendingAssistantPatch.revision = data.revision;
+  pendingAssistantPatch.wrapper = wrapper;
+  pendingAssistantPatch.textBlocks = textBlocks;
+  pendingAssistantPatch.actionsBar = actionsBar;
+
+  const editArea = document.createElement("div");
+  editArea.className = "edit-area bot-edit-area";
+  pendingAssistantPatch.editArea = editArea;
+
+  const label = document.createElement("div");
+  label.className = "patch-edit-label";
+  label.textContent = "Save only";
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "edit-textarea";
+  textarea.value = data.raw_text;
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "edit-btns";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "edit-cancel-btn";
+  cancelBtn.textContent = "Cancel";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "edit-send-btn";
+  saveBtn.textContent = "Save";
+  saveBtn.disabled = !data.raw_text.trim();
+
+  function closeBotPatchEditor() {
+    if (pendingAssistantPatch?.phase === "saving") return;
+    editArea.remove();
+    textBlocks.forEach((block) => block.classList.remove("hidden"));
+    if (actionsBar) actionsBar.classList.remove("hidden");
+    if (pendingAssistantPatch?.patchBtn) pendingAssistantPatch.patchBtn.disabled = false;
+    pendingAssistantPatch = null;
+  }
+
+  cancelBtn.addEventListener("click", closeBotPatchEditor);
+
+  saveBtn.addEventListener("click", () => {
+    const newText = textarea.value.trim();
+    if (!newText || !isConnected()) return;
+
+    if (textarea.value === pendingAssistantPatch?.originalRawText) {
+      closeBotPatchEditor();
+      return;
+    }
+
+    editArea.querySelector(".bot-edit-error")?.remove();
+
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    pendingAssistantPatch.phase = "saving";
+
+    send({
+      type: "save_assistant_message_patch",
+      conversation_id: state.currentConversationId,
+      message_index: pendingAssistantPatch.messageIndex,
+      raw_text: textarea.value,
+      revision: pendingAssistantPatch.revision,
+    });
+  });
+
+  textarea.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && pendingAssistantPatch?.phase !== "saving") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeBotPatchEditor();
+    }
+  });
+
+  textarea.addEventListener("input", () => {
+    saveBtn.disabled = !textarea.value.trim();
+    textarea.style.height = "auto";
+    textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
+  });
+
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(saveBtn);
+  editArea.appendChild(label);
+  editArea.appendChild(textarea);
+  editArea.appendChild(btnRow);
+
+  const lastTextBlock = textBlocks.length > 0 ? textBlocks[textBlocks.length - 1] : null;
+  if (lastTextBlock && lastTextBlock.nextSibling) {
+    wrapper.insertBefore(editArea, lastTextBlock.nextSibling);
+  } else {
+    wrapper.appendChild(editArea);
+  }
+
+  requestAnimationFrame(() => {
+    textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
+    textarea.focus();
+  });
+}
+
+export function handleAssistantPatchSuccess(data) {
+  if (!pendingAssistantPatch) return;
+
+  if (
+    data.conversation_id !== pendingAssistantPatch.conversationId
+    || data.conversation_id !== state.currentConversationId
+  ) {
+    pendingAssistantPatch = null;
+    return;
+  }
+
+  const { botRow, editArea, textBlocks, actionsBar } = pendingAssistantPatch;
+
+  const msg = data.message || {};
+  let editedText = "";
+  if (typeof msg.content === "string") {
+    editedText = msg.content;
+  } else if (Array.isArray(msg.content)) {
+    editedText = msg.content
+      .filter((b) => b && b.type === "text")
+      .map((b) => b.text || "")
+      .join("");
+  }
+
+  textBlocks.forEach((block) => block.remove());
+
+  const newContent = document.createElement("div");
+  newContent.className = "msg-bot-text";
+  newContent.innerHTML = renderMarkdown(editedText);
+
+  editArea.parentNode.insertBefore(newContent, editArea);
+  editArea.remove();
+
+  botRow.dataset.text = editedText;
+
+  if (data.message_index != null && state.currentMessages[data.message_index]) {
+    state.currentMessages[data.message_index] = data.message;
+  }
+
+  if (actionsBar) actionsBar.classList.remove("hidden");
+  if (pendingAssistantPatch.patchBtn) pendingAssistantPatch.patchBtn.disabled = false;
+  pendingAssistantPatch = null;
+}
+
+export function handleAssistantPatchFailure() {
+  if (!pendingAssistantPatch) return;
+
+  if (pendingAssistantPatch.phase === "preparing") {
+    if (pendingAssistantPatch.patchBtn) pendingAssistantPatch.patchBtn.disabled = false;
+    pendingAssistantPatch = null;
+    return;
+  }
+
+  const saveBtn = pendingAssistantPatch.editArea?.querySelector(".edit-send-btn");
+  const cancelBtnEl = pendingAssistantPatch.editArea?.querySelector(".edit-cancel-btn");
+  if (saveBtn) saveBtn.disabled = false;
+  if (cancelBtnEl) cancelBtnEl.disabled = false;
+  pendingAssistantPatch.phase = "editing";
+
+  let errorEl = pendingAssistantPatch.editArea?.querySelector(".bot-edit-error");
+  if (!errorEl && pendingAssistantPatch.editArea) {
+    errorEl = document.createElement("div");
+    errorEl.className = "bot-edit-error";
+    errorEl.textContent = "Could not save \u2014 the stored message changed.";
+    const btnRow = pendingAssistantPatch.editArea.querySelector(".edit-btns");
+    pendingAssistantPatch.editArea.insertBefore(errorEl, btnRow);
+  }
+}
+
+// ---- Patch: unified reset ----
+
+export function resetPatchState() {
+  closePatchConfirmInner();
+  pendingUserPatch = null;
+  pendingAssistantPatch = null;
 }
 
 // ---- Scroll-to-bottom button ----

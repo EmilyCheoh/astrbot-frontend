@@ -1,3 +1,7 @@
+允许编辑历史消息（不触发LLM回复）
+
+---
+
 Show log - (now can query)
 
 ---

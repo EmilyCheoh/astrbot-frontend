@@ -289,24 +289,73 @@
    Edit / Retry
    ================================================================ */
 
-/* Hide edit/retry/patch buttons by default — only show on last messages */
-.msg-action-btn.patch-btn,
+/* Patch buttons visible on all messages; Edit + Retry only on last */
 .msg-action-btn.edit-btn,
 .msg-action-btn.retry-btn {
   display: none;
 }
 
-.msg-row-user.is-last .msg-action-btn.patch-btn,
 .msg-row-user.is-last .msg-action-btn.edit-btn,
-.msg-row-bot.is-last .msg-action-btn.edit-btn,
 .msg-row-bot.is-last .msg-action-btn.retry-btn {
   display: flex;
 }
 
-/* Branch button: always visible (not gated by .is-last) */
+/* Branch / Patch buttons: always visible (not gated by .is-last) */
 .msg-action-btn.branch-btn:disabled {
   opacity: 0.4;
   pointer-events: none;
+}
+
+/* ---- Patch cache-cost confirmation ---- */
+.patch-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.patch-confirm-text {
+  font-size: 13px;
+  color: var(--text-supporting);
+}
+
+.patch-confirm-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.patch-confirm-cancel,
+.patch-confirm-ok {
+  padding: 4px 14px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.patch-confirm-cancel {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.patch-confirm-cancel:hover {
+  background: var(--border-subtle);
+}
+
+.patch-confirm-ok {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+}
+
+.patch-confirm-ok:hover {
+  opacity: 0.85;
 }
 
 /* ---- Bot edit area (left-aligned, higher specificity) ---- */

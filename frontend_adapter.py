@@ -41,9 +41,10 @@ _FROZEN_KINDS = frozenset({
     "branch_conversation",
     "view_history",
     "delete_conversation",
-    "edit_assistant_message",
     "prepare_user_message_patch",
     "save_user_message_patch",
+    "prepare_assistant_message_patch",
+    "save_assistant_message_patch",
 })
 
 
@@ -339,25 +340,31 @@ class FrontendAdapter(Platform):
             if cid:
                 await self.conversations.handle_delete(ws, cid, pid)
 
-        elif kind == "edit_assistant_message":
-            cid = data.get("conversation_id")
-            content = data.get("content", "").strip()
-            original = data.get("original_content", "")
-            if cid and content:
-                await self.messages.handle_edit_assistant_message(
-                    ws, cid, content, original,
-                )
-
         elif kind == "prepare_user_message_patch":
             cid = data.get("conversation_id")
+            branch_index = data.get("branch_index")
+            expected_role = data.get("expected_role", "")
             display_content = data.get("display_content", "")
-            if cid and display_content:
+            if cid and isinstance(branch_index, int) and display_content:
                 await self.messages.handle_prepare_user_message_patch(
-                    ws, cid, display_content,
+                    ws, cid, branch_index, expected_role, display_content,
                 )
 
         elif kind == "save_user_message_patch":
             await self.messages.handle_save_user_message_patch(ws, data)
+
+        elif kind == "prepare_assistant_message_patch":
+            cid = data.get("conversation_id")
+            branch_index = data.get("branch_index")
+            expected_role = data.get("expected_role", "")
+            display_content = data.get("display_content", "")
+            if cid and isinstance(branch_index, int):
+                await self.messages.handle_prepare_assistant_message_patch(
+                    ws, cid, branch_index, expected_role, display_content,
+                )
+
+        elif kind == "save_assistant_message_patch":
+            await self.messages.handle_save_assistant_message_patch(ws, data)
 
         # -- Den local commands (non-turn, never frozen) -------------
         elif kind == "den_command":

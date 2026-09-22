@@ -576,6 +576,7 @@ class ConversationService:
 
             points.append({
                 "role": "assistant",
+                "message_index": last_assistant_index,
                 "cut_index": turn_end_index + 1,
                 "display_text": display_text,
             })
@@ -595,6 +596,7 @@ class ConversationService:
                 if display_text and not display_text.lstrip().startswith("/"):
                     points.append({
                         "role": "user",
+                        "message_index": raw_index,
                         "cut_index": raw_index,
                         "display_text": display_text,
                     })
@@ -606,6 +608,27 @@ class ConversationService:
         # Close the last turn at end of history
         finish_turn(len(history) - 1)
         return points
+
+    @classmethod
+    def resolve_patch_target(
+        cls,
+        history: list[dict],
+        branch_index: int,
+        expected_role: str,
+    ) -> dict | None:
+        """Resolve a branch_index to a patch target with message_index.
+
+        Returns the branch point dict (role, message_index, cut_index,
+        display_text) or ``None`` if the index is out of range or the
+        role does not match.
+        """
+        points = cls._build_branch_points(history)
+        if branch_index < 0 or branch_index >= len(points):
+            return None
+        point = points[branch_index]
+        if point["role"] != expected_role:
+            return None
+        return point
 
     @staticmethod
     async def _send_branch_failed(
