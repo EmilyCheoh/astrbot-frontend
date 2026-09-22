@@ -264,6 +264,42 @@ class MessageService:
         return history, active_cid
 
     @staticmethod
+    def _assistant_turn_has_tool_activity(
+        history: list[dict],
+        message_index: int,
+    ) -> bool:
+        """Check whether the turn containing *message_index* has any tool activity.
+
+        Scans from the preceding user message to the next user message
+        (or end of history) for ``role == "tool"`` or ``tool_calls``.
+        """
+        # Find turn start (user message before this assistant)
+        start = message_index - 1
+        while start >= 0:
+            msg = history[start]
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                break
+            start -= 1
+
+        # Find turn end (next user message after this assistant)
+        end = message_index + 1
+        while end < len(history):
+            msg = history[end]
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                break
+            end += 1
+
+        for msg in history[start + 1 : end]:
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("role") == "tool":
+                return True
+            if bool(msg.get("tool_calls")):
+                return True
+
+        return False
+
+    @staticmethod
     def _extract_text_block(message: dict):
         """Extract the first text block from a message.
 
@@ -410,25 +446,37 @@ class MessageService:
                 )
                 return
 
-            # Apply the edit
+            # Verify the patched message stays branch-eligible
+            from copy import deepcopy
+            candidate = deepcopy(target_message)
             if content_kind == "string":
-                target_message["content"] = edited_raw_text
+                candidate["content"] = edited_raw_text
             elif content_kind == "list" and isinstance(block_index, int):
-                content = target_message.get("content")
-                if (
-                    not isinstance(content, list)
-                    or block_index >= len(content)
-                ):
+                c = candidate.get("content")
+                if not isinstance(c, list) or block_index >= len(c):
                     await self._send_user_patch_failed(
                         ws, conversation_id, "message_changed",
                     )
                     return
-                content[block_index]["text"] = edited_raw_text
+                c[block_index]["text"] = edited_raw_text
             else:
                 await self._send_user_patch_failed(
                     ws, conversation_id, "message_changed",
                 )
                 return
+
+            visible = self._conversations._extract_branch_text(candidate)
+            if not visible or visible.lstrip().startswith("/"):
+                await self._send_user_patch_failed(
+                    ws, conversation_id, "invalid_content",
+                )
+                return
+
+            # Apply the edit to the real message
+            if content_kind == "string":
+                target_message["content"] = edited_raw_text
+            else:
+                target_message["content"][block_index]["text"] = edited_raw_text
 
             await runtime.conversation_manager.update_conversation(
                 self._umo, cid, history=history,
@@ -508,10 +556,10 @@ class MessageService:
             message_index = point["message_index"]
             message = history[message_index]
 
-            # Reject tool-call messages
-            if bool(message.get("tool_calls")):
+            # Reject if the turn contains any tool activity
+            if self._assistant_turn_has_tool_activity(history, message_index):
                 await self._send_assistant_patch_failed(
-                    ws, conversation_id, "has_tool_calls",
+                    ws, conversation_id, "has_tool_activity",
                 )
                 return
 
@@ -594,9 +642,9 @@ class MessageService:
                 )
                 return
 
-            if bool(target.get("tool_calls")):
+            if self._assistant_turn_has_tool_activity(history, message_index):
                 await self._send_assistant_patch_failed(
-                    ws, conversation_id, "has_tool_calls",
+                    ws, conversation_id, "has_tool_activity",
                 )
                 return
 

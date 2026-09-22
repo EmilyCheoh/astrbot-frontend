@@ -35,6 +35,14 @@ from .message_service import MessageService
 _TURN_KINDS = frozenset({"retry", "edit_message"})
 
 # -- Message kinds frozen while a turn is active -----------------------------
+# -- Patch kinds that need specific failure events when busy ----------------
+_PATCH_BUSY_MAP = {
+    "prepare_user_message_patch":     ("user_message_patch_failed", "conversation_id"),
+    "save_user_message_patch":        ("user_message_patch_failed", "conversation_id"),
+    "prepare_assistant_message_patch": ("assistant_message_patch_failed", "conversation_id"),
+    "save_assistant_message_patch":   ("assistant_message_patch_failed", "conversation_id"),
+}
+
 _FROZEN_KINDS = frozenset({
     "switch_conversation",
     "new_conversation",
@@ -602,11 +610,19 @@ class FrontendAdapter(Platform):
                             continue
                         if kind in _FROZEN_KINDS and self._turn_token is not None:
                             try:
-                                await ws.send_json({
-                                    "type": "error",
-                                    "code": "busy",
-                                    "message": "Please wait for the current reply to finish.",
-                                })
+                                if kind in _PATCH_BUSY_MAP:
+                                    etype, cid_field = _PATCH_BUSY_MAP[kind]
+                                    await ws.send_json({
+                                        "type": etype,
+                                        "conversation_id": data.get("conversation_id", ""),
+                                        "reason": "busy",
+                                    })
+                                else:
+                                    await ws.send_json({
+                                        "type": "error",
+                                        "code": "busy",
+                                        "message": "Please wait for the current reply to finish.",
+                                    })
                             except Exception:
                                 pass
                             continue

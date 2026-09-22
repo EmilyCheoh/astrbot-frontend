@@ -317,6 +317,9 @@
   border-radius: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
+  max-width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
 }
 
 .patch-confirm-text {
@@ -327,6 +330,8 @@
 .patch-confirm-btns {
   display: flex;
   gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .patch-confirm-cancel,

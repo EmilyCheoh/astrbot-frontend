@@ -15,7 +15,7 @@ import {
   scrollToBottom, setComposerReadonly, updateLastActions, initScrollButton,
   handleAssistantPatchReady, handleAssistantPatchSuccess, handleAssistantPatchFailure,
   handleUserPatchReady, handleUserPatchSuccess, handleUserPatchFailure,
-  resetPatchState, isPatchConfirmOpen, closePatchConfirm,
+  resetPatchState, closeTopmostPatchLayer,
 } from "./messages.js";
 import {
   sendMessage, initComposer, updateComposerAvailability,
@@ -429,8 +429,11 @@ document.addEventListener("keydown", (e) => {
     closeSearch();
     return;
   }
-  if (isPatchConfirmOpen()) {
-    closePatchConfirm();
+  if (dom.convPanel && dom.convPanel.classList.contains("open")) {
+    closePanel();
+    return;
+  }
+  if (closeTopmostPatchLayer()) {
     return;
   }
 });

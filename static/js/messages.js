@@ -716,18 +716,36 @@ let pendingPatchConfirm = null; // { row, bar }
 let pendingUserPatch = null;
 let pendingAssistantPatch = null;
 
+function canDispatchPatch() {
+  return isConnected() && !state.isProcessing && !state.isReadonly;
+}
+
 function closePatchConfirmInner() {
   if (!pendingPatchConfirm) return;
   pendingPatchConfirm.bar.remove();
   pendingPatchConfirm = null;
 }
 
-export function isPatchConfirmOpen() {
-  return pendingPatchConfirm !== null;
+export function closeTopmostPatchLayer() {
+  if (pendingPatchConfirm) {
+    closePatchConfirmInner();
+    return true;
+  }
+  if (pendingUserPatch) {
+    if (pendingUserPatch.phase === "saving") return true;
+    pendingUserPatch.cancel?.();
+    return true;
+  }
+  if (pendingAssistantPatch) {
+    if (pendingAssistantPatch.phase === "saving") return true;
+    pendingAssistantPatch.cancel?.();
+    return true;
+  }
+  return false;
 }
 
-export function closePatchConfirm() {
-  closePatchConfirmInner();
+function userPatchVisibleText(rawText) {
+  return rawText.replace(TIMESTAMP_TAG_RE, "").trim();
 }
 
 function showPatchConfirm(row, role, branchIndex, displayText) {
@@ -778,6 +796,9 @@ function handleUserPatchClick(userRow) {
 }
 
 function startUserPatchPrepare(userRow, branchIndex, displayContent) {
+  if (!canDispatchPatch()) return;
+  if (pendingUserPatch || pendingAssistantPatch) return;
+
   const patchBtn = userRow.querySelector(".patch-btn");
   if (patchBtn) patchBtn.disabled = true;
 
@@ -857,6 +878,8 @@ export function handleUserPatchReady(data) {
     pendingUserPatch = null;
   }
 
+  pendingUserPatch.cancel = closePatchEditor;
+
   cancelBtn.addEventListener("click", closePatchEditor);
 
   saveBtn.addEventListener("click", () => {
@@ -865,7 +888,18 @@ export function handleUserPatchReady(data) {
       return;
     }
 
-    if (!isConnected()) return;
+    if (!canDispatchPatch()) return;
+
+    // Prevent patched message from becoming non-branch-eligible
+    const visibleText = userPatchVisibleText(textarea.value);
+    if (!visibleText || visibleText.startsWith("/")) {
+      editArea.querySelector(".patch-edit-error")?.remove();
+      const hint = document.createElement("div");
+      hint.className = "patch-edit-error";
+      hint.textContent = "Patched message cannot be empty or start with /.";
+      editArea.insertBefore(hint, editArea.querySelector(".edit-btns"));
+      return;
+    }
 
     editArea.querySelector(".patch-edit-error")?.remove();
 
@@ -961,9 +995,12 @@ export function handleUserPatchFailure(data) {
 
   let errorEl = pendingUserPatch.editArea?.querySelector(".patch-edit-error");
   if (!errorEl && pendingUserPatch.editArea) {
+    const reason = data?.reason || "";
     errorEl = document.createElement("div");
     errorEl.className = "patch-edit-error";
-    errorEl.textContent = "Could not save \u2014 the stored message changed.";
+    errorEl.textContent = reason === "invalid_content"
+      ? "Patched message cannot be empty or start with /."
+      : "Could not save \u2014 the stored message changed.";
     const btnRowEl = pendingUserPatch.editArea.querySelector(".edit-btns");
     pendingUserPatch.editArea.insertBefore(errorEl, btnRowEl);
   }
@@ -988,6 +1025,9 @@ function handleAssistantPatchClick(botRow) {
 }
 
 function startAssistantPatchPrepare(botRow, branchIndex, displayText) {
+  if (!canDispatchPatch()) return;
+  if (pendingUserPatch || pendingAssistantPatch) return;
+
   const patchBtn = botRow.querySelector(".patch-btn");
   if (patchBtn) patchBtn.disabled = true;
 
@@ -1066,11 +1106,14 @@ export function handleAssistantPatchReady(data) {
     pendingAssistantPatch = null;
   }
 
+  pendingAssistantPatch.cancel = closeBotPatchEditor;
+
   cancelBtn.addEventListener("click", closeBotPatchEditor);
 
   saveBtn.addEventListener("click", () => {
     const newText = textarea.value.trim();
-    if (!newText || !isConnected()) return;
+    if (!newText) return;
+    if (!canDispatchPatch()) return;
 
     if (textarea.value === pendingAssistantPatch?.originalRawText) {
       closeBotPatchEditor();
