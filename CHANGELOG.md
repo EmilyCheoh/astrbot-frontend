@@ -1,3 +1,7 @@
+refactor "conversation_service.py"
+
+---
+
 允许编辑历史消息（不触发LLM回复）
 
 ---
