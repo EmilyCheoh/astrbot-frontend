@@ -616,6 +616,13 @@ function handleRetry(botRow) {
     node = next;
   }
   pendingBotRow = null;
+
+  // Roll back branch index to account for removed rows
+  const retryBranchIndex = Number(lastUser.dataset.branchIndex);
+  if (Number.isInteger(retryBranchIndex)) {
+    nextBranchIndex = retryBranchIndex + 1;
+  }
+
   updateLastActions();
 
   // Lock immediately — do not wait for server's "thinking" status
@@ -680,6 +687,12 @@ function handleEditClick(userRow) {
       node = next;
     }
     pendingBotRow = null;
+
+    // Roll back branch index to account for removed rows
+    const editBranchIndex = Number(userRow.dataset.branchIndex);
+    if (Number.isInteger(editBranchIndex)) {
+      nextBranchIndex = editBranchIndex + 1;
+    }
 
     // Lock immediately — do not wait for server's "thinking" status
     state.isProcessing = true;
