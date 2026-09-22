@@ -189,25 +189,42 @@ class MessageService:
 
     async def handle_retry_or_edit(
         self, ws: web.WebSocketResponse, content: str,
-        *, action: str = "retry", turn_token: object = None,
+        *, action: str = "retry", original_content: str = "",
+        turn_token: object = None,
     ) -> bool:
         """Handle retry or edit: truncate last exchange, re-fire message.
 
         Returns ``True`` if the event was committed (turn owned by
         pipeline).  Returns ``False`` if processing failed before commit
         — the caller must release the turn and send idle.
+
+        For edits, *original_content* carries the pre-edit text so
+        truncation can verify against the DB, while *content* holds
+        the new text to submit.
         """
         if not content.strip():
             return False
 
-        success = await self._truncate_last_exchange(expected_content=content, action=action)
+        # Edit: verify DB against the original text, not the new text
+        if action == "edit" and original_content.strip():
+            expected = original_content
+        else:
+            expected = content
+
+        success = await self._truncate_last_exchange(expected_content=expected, action=action)
         if not success:
             logger.warning("Retry/edit failed: could not truncate history")
             return False
 
+        # Edit: prepend 【重发】 so downstream worldbook/prompt logic
+        # knows this is a re-submission, not a brand-new message.
+        submit_content = content
+        if action == "edit":
+            submit_content = f"【重发】{content}"
+
         # Re-fire as a normal message through the standard pipeline
         return await self.on_message(
-            {"content": content, "id": str(uuid.uuid4())}, ws, turn_token,
+            {"content": submit_content, "id": str(uuid.uuid4())}, ws, turn_token,
         )
 
     # -- Shared patch helpers --------------------------------------------------

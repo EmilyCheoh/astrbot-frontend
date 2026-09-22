@@ -585,6 +585,7 @@ class FrontendAdapter(Platform):
                             committed = await self.messages.handle_retry_or_edit(
                                 ws, data.get("content", ""),
                                 action="retry" if kind == "retry" else "edit",
+                                original_content=data.get("original_content", ""),
                                 turn_token=turn_token,
                             )
                         except Exception as exc:

@@ -685,7 +685,7 @@ function handleEditClick(userRow) {
     state.isProcessing = true;
     updateComposerAvailability();
 
-    send({ type: "edit_message", content: newText });
+    send({ type: "edit_message", content: newText, original_content: originalText });
     updateLastActions();
   });
 
