@@ -15,6 +15,7 @@ export const dom = {
   sendBtn:            document.getElementById("send-btn"),
   themeToggle:        document.getElementById("theme-toggle"),
   fontToggle:         document.getElementById("font-toggle"),
+  headerTitle:        document.getElementById("header-title"),
   panelToggle:        document.getElementById("panel-toggle"),
   panelOverlay:       document.getElementById("panel-overlay"),
   convPanel:          document.getElementById("conv-panel"),

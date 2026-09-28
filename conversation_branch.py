@@ -199,7 +199,7 @@ class ConversationBranchService:
                 await self._send_branch_failed(ws, source_cid)
                 return
 
-            source_history, source_platform_id = loaded
+            source_history, source_platform_id, _ = loaded
 
             branch_points = self._build_branch_points(source_history)
 

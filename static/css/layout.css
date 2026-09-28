@@ -13,19 +13,22 @@
 
 /* ---- Header ---- */
 .chat-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 112px;
   align-items: center;
-  justify-content: space-between;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-primary);
 }
 
-.header-left { width: 76px; }
+.header-left {
+  width: auto;
+}
 
 .header-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 2px;
 }
 
@@ -34,6 +37,11 @@
   font-weight: 500;
   color: var(--text-supporting);
   letter-spacing: 0.3px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
 }
 
 .icon-btn {

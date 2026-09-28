@@ -50,7 +50,7 @@ export function formatQuoteForSend(userText) {
   const q = state.pendingQuote;
   const sourceLabel = getSourceLabel(q.sourceType, q.sourceName);
   const quotedLines = q.text.split("\n").map(line => `> ${line}`).join("\n");
-  return `${userText}\n\nCiting ${sourceLabel}:\n${quotedLines}`;
+  return `Citing ${sourceLabel}:\n${quotedLines}\n\n---\n\n${userText}`;
 }
 
 // ---- Init ----

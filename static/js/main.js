@@ -45,6 +45,14 @@ import {
 import { initSelectionMenu, hideSelectionMenu } from "./selection_menu.js";
 import { initQuote } from "./quote.js";
 
+// ---- Header title helper ----
+
+function updateHeaderTitle(title) {
+  const normalized = typeof title === "string" ? title.trim() : "";
+  dom.headerTitle.textContent =
+    normalized && normalized !== "(empty)" ? normalized : "Den";
+}
+
 // ---- Message dispatch (called by socket.js on every WS message) ----
 
 function handleMessage(data) {
@@ -195,21 +203,12 @@ function handleMessage(data) {
       state.currentMessages = data.messages || [];
       state.isReadonly = data.readonly || false;
 
-      // Derive conversation title: Map entry > first user message > fallback
+      // Title: authoritative from server, fallback to sidebar entry
+      const serverTitle = data.title || "";
       const knownConv = state.conversationById.get(data.conversation_id);
-      if (knownConv && knownConv.preview && knownConv.preview !== "(empty)") {
-        state.currentConvTitle = knownConv.preview;
-      } else {
-        const firstUser = state.currentMessages.find(m => m.role === "user");
-        const raw = firstUser
-          ? (typeof firstUser.content === "string"
-            ? firstUser.content
-            : Array.isArray(firstUser.content)
-              ? (firstUser.content.find(b => b.type === "text") || {}).text || ""
-              : "")
-          : "";
-        state.currentConvTitle = raw.trim().split("\n")[0].slice(0, 80) || "conversation";
-      }
+      state.currentConvTitle = serverTitle
+        || (knownConv && knownConv.preview && knownConv.preview !== "(empty)" ? knownConv.preview : "");
+      updateHeaderTitle(state.currentConvTitle);
 
       dom.messages.innerHTML = "";
       renderHistory(state.currentMessages);
@@ -264,8 +263,9 @@ function handleMessage(data) {
       state.pendingConversationId = null;
       state.activeAnchorId = null;
       state.currentMessages = [];
-      state.currentConvTitle = "conversation";
+      state.currentConvTitle = "";
       state.isReadonly = false;
+      updateHeaderTitle("");
       dom.messages.innerHTML = "";
       setComposerReadonly(false);
       updateComposerAvailability();
@@ -281,7 +281,8 @@ function handleMessage(data) {
       state.pendingConversationId = null;
       state.activeAnchorId = null;
       state.currentMessages = data.messages || [];
-      state.currentConvTitle = data.title || "conversation-branched";
+      state.currentConvTitle = data.title || "";
+      updateHeaderTitle(state.currentConvTitle);
       state.isReadonly = false;
 
       dom.messages.innerHTML = "";
@@ -325,6 +326,10 @@ function handleMessage(data) {
     case "conversation_renamed": {
       const newTitle = data.title || "(empty)";
       updateConversation(data.conversation_id, { preview: newTitle });
+      if (data.conversation_id === state.currentConversationId) {
+        state.currentConvTitle = newTitle;
+        updateHeaderTitle(newTitle);
+      }
       break;
     }
 

@@ -135,12 +135,13 @@ class ConversationService:
         try:
             platform_id = self._core.config.get("id", "abyss_web")
 
+            title = ""
             if conversation_id:
                 result = self._core.load_conversation_history(
                     conversation_id, platform_id,
                 )
                 if result is not None:
-                    messages, _ = result
+                    messages, _, title = result
                     cid = conversation_id
                 else:
                     messages, cid = [], conversation_id
@@ -152,7 +153,7 @@ class ConversationService:
                 conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
                 try:
                     cursor = conn.execute(
-                        "SELECT content, conversation_id FROM conversations "
+                        "SELECT content, conversation_id, title FROM conversations "
                         "WHERE platform_id = ? ORDER BY updated_at DESC LIMIT 1",
                         (platform_id,),
                     )
@@ -162,6 +163,7 @@ class ConversationService:
                 if row and row[0]:
                     messages = json.loads(row[0])
                     cid = row[1]
+                    title = row[2] or ""
                 else:
                     messages = []
                     cid = row[1] if row else None
@@ -172,6 +174,7 @@ class ConversationService:
                 "readonly": False,
                 "platform_id": platform_id,
                 "conversation_id": cid,
+                "title": title,
             })
         except Exception as exc:
             logger.warning(f"Failed to load chat history: {exc}")
@@ -323,7 +326,7 @@ class ConversationService:
                 await self._send_navigation_failed(ws, conversation_id)
                 return
 
-            messages, pid = result
+            messages, pid, title = result
 
             # History validated — safe to switch pointer now
             await runtime.conversation_manager.switch_conversation(
@@ -335,6 +338,7 @@ class ConversationService:
                 "readonly": False,
                 "platform_id": pid,
                 "conversation_id": conversation_id,
+                "title": title,
             })
             await ws.send_json({
                 "type": "conversation_switched",
@@ -375,7 +379,7 @@ class ConversationService:
                 await self._send_navigation_failed(ws, conversation_id)
                 return
 
-            messages, pid = result
+            messages, pid, title = result
             den_pid = self._core.config.get("id", "abyss_web")
             await ws.send_json({
                 "type": "history",
@@ -383,6 +387,7 @@ class ConversationService:
                 "readonly": pid != den_pid,
                 "platform_id": pid,
                 "conversation_id": conversation_id,
+                "title": title,
             })
         except Exception as exc:
             logger.warning(f"Failed to view history: {exc}")

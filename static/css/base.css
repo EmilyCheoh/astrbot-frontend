@@ -99,3 +99,16 @@ body {
   background: var(--border-subtle);
   border-radius: 2px;
 }
+
+
+/* ================================================================
+   Mobile — prevent iOS Safari auto-zoom on input focus
+   ================================================================ */
+
+@media (max-width: 768px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}

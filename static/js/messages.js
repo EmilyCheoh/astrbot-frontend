@@ -449,14 +449,8 @@ export function finalizePendingBotRow() {
   const userHasAttachment = lastUserRow && lastUserRow.dataset.hasAttachment;
 
   const botActions = [
-    ...(!userHasAttachment
-      ? [{ icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" }]
-      : []),
-    ...(plainText && !hasToolCall
-      ? [{ icon: ICON_PATCH, title: "Edit response", onClick: () => handleAssistantPatchClick(row), className: "patch-btn" }]
-      : []),
-    ...(branchable
-      ? [{ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" }]
+    ...(plainText
+      ? [{ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(row.dataset.text || "", e.currentTarget) }]
       : []),
     ...(plainText
       ? [{ icon: ICON_STAR, title: "Bookmark", onClick: (e) => {
@@ -474,8 +468,14 @@ export function finalizePendingBotRow() {
           openNotePopover(draft, btn, btn);
         }, className: "star-btn" }]
       : []),
-    ...(plainText
-      ? [{ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(row.dataset.text || "", e.currentTarget) }]
+    ...(branchable
+      ? [{ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" }]
+      : []),
+    ...(!userHasAttachment
+      ? [{ icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" }]
+      : []),
+    ...(plainText && !hasToolCall
+      ? [{ icon: ICON_PATCH, title: "Edit response", onClick: () => handleAssistantPatchClick(row), className: "patch-btn" }]
       : []),
   ];
 

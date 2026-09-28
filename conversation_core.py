@@ -165,11 +165,12 @@ class ConversationCore:
         self,
         conversation_id: str,
         platform_filter: str | tuple[str, ...],
-    ) -> tuple[list, str] | None:
+    ) -> tuple[list, str, str] | None:
         """Load and parse a single conversation's history from the DB.
 
-        Returns ``(messages, platform_id)`` when the row exists (messages
-        may be ``[]`` for a newly created conversation with no content yet).
+        Returns ``(messages, platform_id, title)`` when the row exists
+        (messages may be ``[]`` for a newly created conversation with no
+        content yet; title may be ``""``).
         Returns ``None`` when no matching row is found.
         Raises on DB access or JSON parse errors.
         """
@@ -181,14 +182,14 @@ class ConversationCore:
         try:
             if isinstance(platform_filter, str):
                 cursor = conn.execute(
-                    "SELECT content, platform_id FROM conversations "
+                    "SELECT content, platform_id, title FROM conversations "
                     "WHERE conversation_id = ? AND platform_id = ?",
                     (conversation_id, platform_filter),
                 )
             else:
                 placeholders = ",".join("?" * len(platform_filter))
                 cursor = conn.execute(
-                    f"SELECT content, platform_id FROM conversations "
+                    f"SELECT content, platform_id, title FROM conversations "
                     f"WHERE conversation_id = ? AND platform_id IN ({placeholders})",
                     (conversation_id, *platform_filter),
                 )
@@ -199,6 +200,6 @@ class ConversationCore:
         if row is None:
             return None
 
-        content, pid = row
+        content, pid, title = row
         messages = json.loads(content) if content else []
-        return (messages, pid)
+        return (messages, pid, title or "")
