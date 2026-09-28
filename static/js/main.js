@@ -208,7 +208,7 @@ function handleMessage(data) {
       const knownConv = state.conversationById.get(data.conversation_id);
       state.currentConvTitle = serverTitle
         || (knownConv && knownConv.preview && knownConv.preview !== "(empty)" ? knownConv.preview : "");
-      updateHeaderTitle(serverTitle);
+      updateHeaderTitle(state.currentConvTitle);
 
       dom.messages.innerHTML = "";
       renderHistory(state.currentMessages);
