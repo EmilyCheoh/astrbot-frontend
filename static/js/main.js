@@ -414,8 +414,7 @@ dom.tokenInput.addEventListener("keydown", (e) => {
 // ---- Header buttons ----
 
 dom.themeToggle.addEventListener("click", cycleTheme);
-dom.fontToggle.addEventListener("click", (e) => {
-  e.stopPropagation();
+dom.fontToggle.addEventListener("click", () => {
   toggleFontSettings();
 });
 

@@ -91,8 +91,7 @@ function handleBookmarks() {
 // ---- Bind events ----
 
 export function initHeaderMenu() {
-  dom.moreMenuBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
+  dom.moreMenuBtn.addEventListener("click", () => {
     toggleMoreMenu();
   });
 
