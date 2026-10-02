@@ -1,3 +1,15 @@
+Text settings popover + chat size
+
++ Aa button now opens a text settings popover (font + size) instead of directly cycling font
++ Chat size: Small (15px) / Medium (17px) / Large (19px) with matching CoT, code, and table sizes
++ Default size: Medium; saved to localStorage as den-chat-size
++ CoT font sizes increased by 1-2px from previous values across all presets
++ CSS variable-driven: all existing and future messages inherit size instantly
++ Popover integrates with Esc layering and outside-click; mutual exclusion with more-menu
++ Bookmarks page font remains fully independent
+
+---
+
 UI优化 patch 1
 
 ---

@@ -8,7 +8,10 @@
 import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { connectWS, send, stopReconnect } from "./socket.js";
-import { cycleTheme, cycleFont, cycleBookmarksFont } from "./preferences.js";
+import {
+  cycleTheme, applyFont, applyChatSize, cycleBookmarksFont,
+  toggleFontSettings, closeFontSettings, isFontSettingsOpen,
+} from "./preferences.js";
 import {
   appendBot, appendSystem, appendDenLog, appendDenCommandError,
   finalizePendingBotRow, renderHistory,
@@ -411,13 +414,35 @@ dom.tokenInput.addEventListener("keydown", (e) => {
 // ---- Header buttons ----
 
 dom.themeToggle.addEventListener("click", cycleTheme);
-dom.fontToggle.addEventListener("click", cycleFont);
+dom.fontToggle.addEventListener("click", (e) => {
+  e.stopPropagation();
+  toggleFontSettings();
+});
+
+// ---- Font settings popover buttons ----
+
+dom.fontSerifBtn.addEventListener("click", () => applyFont("serif"));
+dom.fontSansBtn.addEventListener("click", () => applyFont("sans-serif"));
+dom.fontSizeSmallBtn.addEventListener("click", () => applyChatSize("small"));
+dom.fontSizeMediumBtn.addEventListener("click", () => applyChatSize("medium"));
+dom.fontSizeLargeBtn.addEventListener("click", () => applyChatSize("large"));
+
+// Close font settings on outside click
+document.addEventListener("click", (e) => {
+  if (isFontSettingsOpen() && !e.target.closest(".font-settings-wrapper")) {
+    closeFontSettings();
+  }
+});
 
 // ---- Global ESC ----
 
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
 
+  if (isFontSettingsOpen()) {
+    closeFontSettings();
+    return;
+  }
   if (isNotePopoverOpen()) {
     closeNotePopover();
     return;

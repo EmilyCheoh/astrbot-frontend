@@ -44,7 +44,26 @@
       </div>
       <span id="header-title" class="header-title">Den</span>
       <div class="header-right">
-        <button id="font-toggle" class="icon-btn" title="Font: serif">Aa</button>
+        <div class="font-settings-wrapper">
+          <button id="font-toggle" class="icon-btn" title="Serif · Medium" aria-expanded="false">Aa</button>
+          <div id="font-settings" class="font-settings hidden">
+            <div class="font-settings-row">
+              <span class="font-settings-label">Font</span>
+              <div class="font-settings-seg">
+                <button type="button" id="font-serif-btn" class="seg-btn" aria-pressed="true">Serif</button>
+                <button type="button" id="font-sans-btn" class="seg-btn" aria-pressed="false">Sans</button>
+              </div>
+            </div>
+            <div class="font-settings-row">
+              <span class="font-settings-label">Size</span>
+              <div class="font-settings-seg">
+                <button type="button" id="font-size-small-btn" class="seg-btn" aria-pressed="false">Small</button>
+                <button type="button" id="font-size-medium-btn" class="seg-btn" aria-pressed="true">Medium</button>
+                <button type="button" id="font-size-large-btn" class="seg-btn" aria-pressed="false">Large</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <button id="theme-toggle" class="icon-btn" title="Theme: auto"></button>
         <div class="more-menu-wrapper">
           <button id="more-menu-btn" class="icon-btn more-dots" title="More">&middot;&middot;&middot;</button>
