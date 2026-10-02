@@ -267,6 +267,7 @@ function handleMessage(data) {
       state.isReadonly = false;
       updateHeaderTitle("");
       dom.messages.innerHTML = "";
+      renderHistory(state.currentMessages);
       setComposerReadonly(false);
       updateComposerAvailability();
       closePanel();
