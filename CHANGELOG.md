@@ -1,3 +1,7 @@
+修复放大之后不能左右滑的问题
+
+---
+
 Text settings popover + chat size
 
 + Aa button now opens a text settings popover (font + size) instead of directly cycling font

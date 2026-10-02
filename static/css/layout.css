@@ -8,7 +8,8 @@
   height: 100dvh;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* ---- Header ---- */
@@ -102,7 +103,8 @@
 /* ---- Scroll-to-bottom button ---- */
 .scroll-bottom-btn {
   position: absolute;
-  bottom: 84px; /* JS overrides dynamically via ResizeObserver */
+  bottom: 84px;
+  /* JS overrides dynamically via ResizeObserver */
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
