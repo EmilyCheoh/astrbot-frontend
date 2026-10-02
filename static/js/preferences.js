@@ -43,7 +43,7 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () 
 // ---- Font — Serif / Sans-serif ----
 
 const FONT_SERIF = 'Georgia, "Times New Roman", serif';
-const FONT_SANS  = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+const FONT_SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 export function applyFont(family) {
   const isSerif = family === "serif";
@@ -53,11 +53,11 @@ export function applyFont(family) {
   );
   localStorage.setItem("den-font", family);
   if (dom.fontToggle) {
-    dom.fontToggle.className = "icon-btn " + (isSerif ? "serif" : "sans");
+    dom.fontToggle.className = "icon-btn " + (isSerif ? "Georgia" : "System");
   }
   // Sync popover font buttons
   if (dom.fontSerifBtn) dom.fontSerifBtn.setAttribute("aria-pressed", isSerif);
-  if (dom.fontSansBtn)  dom.fontSansBtn.setAttribute("aria-pressed", !isSerif);
+  if (dom.fontSansBtn) dom.fontSansBtn.setAttribute("aria-pressed", !isSerif);
   updateFontToggleTitle();
 }
 
@@ -65,15 +65,15 @@ export function applyFont(family) {
 // ---- Chat Size — Small / Medium / Large (segmented) ----
 
 const CHAT_SIZE_PRESETS = {
-  small:  { message: "15px", cot: "14px", cotTitle: "13px", code: "13px", table: "14px" },
+  small: { message: "15px", cot: "14px", cotTitle: "13px", code: "13px", table: "14px" },
   medium: { message: "17px", cot: "16px", cotTitle: "15px", code: "15px", table: "16px" },
-  large:  { message: "19px", cot: "18px", cotTitle: "17px", code: "17px", table: "18px" },
+  large: { message: "19px", cot: "18px", cotTitle: "17px", code: "17px", table: "18px" },
 };
 
 const SIZE_BTNS = () => [
-  { key: "small",  el: dom.fontSizeSmallBtn },
+  { key: "small", el: dom.fontSizeSmallBtn },
   { key: "medium", el: dom.fontSizeMediumBtn },
-  { key: "large",  el: dom.fontSizeLargeBtn },
+  { key: "large", el: dom.fontSizeLargeBtn },
 ];
 
 export function applyChatSize(size) {
@@ -98,7 +98,7 @@ export function applyChatSize(size) {
 
 function updateFontToggleTitle() {
   if (!dom.fontToggle) return;
-  const font = (localStorage.getItem("den-font") || "serif") === "serif" ? "Serif" : "Sans";
+  const font = (localStorage.getItem("den-font") || "serif") === "serif" ? "Georgia" : "System";
   const rawSize = localStorage.getItem("den-chat-size") || "medium";
   const size = CHAT_SIZE_PRESETS[rawSize] ? rawSize : "medium";
   const sizeLabel = size.charAt(0).toUpperCase() + size.slice(1);
@@ -129,7 +129,7 @@ export function isFontSettingsOpen() {
 // ---- Bookmarks Font — Georgia / System (independent) ----
 
 const FONT_BOOKMARK_SERIF = 'Georgia, "Times New Roman", serif';
-const FONT_BOOKMARK_SANS  = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+const FONT_BOOKMARK_SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 export function applyBookmarksFont(mode) {
   const isGeorgia = mode === "georgia";
