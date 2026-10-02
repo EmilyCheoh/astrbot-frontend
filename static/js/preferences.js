@@ -53,7 +53,7 @@ export function applyFont(family) {
   );
   localStorage.setItem("den-font", family);
   if (dom.fontToggle) {
-    dom.fontToggle.className = "icon-btn " + (isSerif ? "Georgia" : "System");
+    dom.fontToggle.className = "icon-btn " + (isSerif ? "serif" : "sans");
   }
   // Sync popover font buttons
   if (dom.fontSerifBtn) dom.fontSerifBtn.setAttribute("aria-pressed", isSerif);
