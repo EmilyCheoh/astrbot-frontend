@@ -12,6 +12,12 @@
   overflow-y: hidden;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .chat-layout {
+    grid-template-columns: minmax(792px, 1fr);
+  }
+}
+
 /* ---- Header ---- */
 .chat-header {
   display: grid;
