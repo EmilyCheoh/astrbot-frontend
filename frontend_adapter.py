@@ -475,12 +475,29 @@ class FrontendAdapter(Platform):
                 # Candidate ws died during handoff wait
                 return ws
 
-            # Strict CID alignment — infrastructure failures abort the
-            # session so the client never operates against a stale pointer.
+            # Extract optional resume fields (auto-reconnect only).
+            raw_resume_cid = data.get("resume_conversation_id")
+            raw_resume_pid = data.get("resume_platform_id")
+            resume_cid = (
+                raw_resume_cid
+                if isinstance(raw_resume_cid, str) and raw_resume_cid
+                else None
+            )
+            resume_pid = (
+                raw_resume_pid
+                if isinstance(raw_resume_pid, str) and raw_resume_pid
+                else None
+            )
+
+            # Build authoritative history — validates resume target,
+            # aligns the Den CID pointer, and constructs the payload
+            # as a single atomic step before auth_ok.
             try:
-                cid = await self.conversations.align_cid()
+                history_payload = await self.conversations.prepare_auth_history(
+                    resume_cid, resume_pid,
+                )
             except Exception as exc:
-                logger.warning(f"CID alignment failed during auth: {exc}")
+                logger.warning(f"CID alignment/history restore failed during auth: {exc}")
                 try:
                     await ws.send_json({
                         "type": "error",
@@ -492,7 +509,7 @@ class FrontendAdapter(Platform):
                 return ws
 
             await ws.send_json({"type": "auth_ok"})
-            await self.conversations.send_history(ws, conversation_id=cid)
+            await ws.send_json(history_payload)
             await self.conversations.send_favorites(ws)
             logger.info("Web frontend client authenticated.")
 

@@ -400,14 +400,21 @@ function handleMessage(data) {
 
 // ---- Login ----
 
+function getReconnectContext() {
+  return {
+    conversationId: state.currentConversationId,
+    platformId: state.currentPlatformId,
+  };
+}
+
 dom.loginBtn.addEventListener("click", () => {
   dom.tokenInput.placeholder = "Token";
-  connectWS(dom.tokenInput.value, handleMessage);
+  connectWS(dom.tokenInput.value, handleMessage, getReconnectContext);
 });
 dom.tokenInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     dom.tokenInput.placeholder = "Token";
-    connectWS(dom.tokenInput.value, handleMessage);
+    connectWS(dom.tokenInput.value, handleMessage, getReconnectContext);
   }
 });
 

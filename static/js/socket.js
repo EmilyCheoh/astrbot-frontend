@@ -1,7 +1,8 @@
 /* ================================================================
    Den — WebSocket Connection
    Pure transport layer — NO UI knowledge.
-   Exposes connect(token, onMessage), send(payload), isConnected().
+   Exposes connect(token, onMessage, getReconnectContext), send(payload),
+   isConnected().
 
    Generation tracking: each connectWS() call increments a local
    counter.  Callbacks from stale sockets (whose generation no longer
@@ -20,21 +21,18 @@ let reconnectDelay = 1000;
 let reconnectTimer = null;
 let messageHandler = null;
 let socketGeneration = 0;
+let reconnectContextProvider = null;
 
 function scheduleReconnect() {
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    // Re-check: token may have been cleared while the timer was pending
     if (!savedToken) return;
-    connectWS(savedToken, messageHandler);
+    openSocket(true);
     reconnectDelay = Math.min(reconnectDelay * 1.5, 15000);
   }, reconnectDelay);
 }
 
-export function connectWS(token, onMessage) {
-  savedToken = token;
-  messageHandler = onMessage;
-
+function openSocket(isReconnect) {
   const gen = ++socketGeneration;
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const sock = new WebSocket(`${proto}//${location.host}/ws`);
@@ -42,7 +40,18 @@ export function connectWS(token, onMessage) {
 
   sock.onopen = () => {
     if (gen !== socketGeneration) return;
-    sock.send(JSON.stringify({ type: "auth", token: savedToken }));
+
+    const auth = { type: "auth", token: savedToken };
+
+    if (isReconnect && reconnectContextProvider) {
+      const context = reconnectContextProvider();
+      if (context?.conversationId && context?.platformId) {
+        auth.resume_conversation_id = context.conversationId;
+        auth.resume_platform_id = context.platformId;
+      }
+    }
+
+    sock.send(JSON.stringify(auth));
     reconnectDelay = 1000;
   };
 
@@ -77,6 +86,15 @@ export function connectWS(token, onMessage) {
   sock.onerror = () => {};
 }
 
+export function connectWS(token, onMessage, getReconnectContext = null) {
+  savedToken = token;
+  messageHandler = onMessage;
+  reconnectContextProvider = getReconnectContext;
+
+  // Manual login — always false, never carries resume fields.
+  openSocket(false);
+}
+
 export function send(payload) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(payload));
@@ -89,6 +107,7 @@ export function isConnected() {
 
 export function stopReconnect() {
   savedToken = null;
+  reconnectContextProvider = null;
   if (reconnectTimer !== null) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;

@@ -107,6 +107,131 @@ class ConversationService:
         )
         return cid
 
+    # -- Auth history (reconnect-aware) ----------------------------------------
+
+    _UNSET = object()  # sentinel: align_cid not yet called this auth cycle
+
+    @staticmethod
+    def _make_history_payload(
+        *,
+        messages,
+        conversation_id,
+        platform_id,
+        title,
+        readonly,
+    ):
+        return {
+            "type": "history",
+            "messages": messages,
+            "readonly": readonly,
+            "platform_id": platform_id,
+            "conversation_id": conversation_id,
+            "title": title,
+        }
+
+    async def _align_cid_once(self, cached):
+        """Run align_cid() if not yet executed this cycle; return (cid, True)
+        on first call, (cached, False) on subsequent calls.
+
+        *cached* must be ``_UNSET`` on the first call.  A ``None`` return
+        from ``align_cid()`` is valid (no Den conversations) and must not
+        be confused with "not yet executed."
+        """
+        if cached is not self._UNSET:
+            return cached, False
+        cid = await self.align_cid()
+        return cid, True
+
+    async def _latest_den_auth_history(self, *, aligned_cid=_UNSET):
+        """Default auth history: latest Den window + aligned CID pointer.
+
+        If *aligned_cid* is the sentinel, calls ``align_cid()`` itself.
+        Otherwise reuses the already-aligned value.
+        """
+        den_pid = self._core.config.get("id", "abyss_web")
+        cid, _ = await self._align_cid_once(aligned_cid)
+
+        if cid is None:
+            return self._make_history_payload(
+                messages=[],
+                conversation_id=None,
+                platform_id=den_pid,
+                title="",
+                readonly=False,
+            )
+
+        result = self._core.load_conversation_history(cid, den_pid)
+        if result is None:
+            raise RuntimeError("Aligned Den conversation could not be loaded")
+
+        messages, actual_pid, title = result
+        return self._make_history_payload(
+            messages=messages,
+            conversation_id=cid,
+            platform_id=actual_pid,
+            title=title,
+            readonly=False,
+        )
+
+    async def prepare_auth_history(
+        self,
+        resume_conversation_id: str | None,
+        resume_platform_id: str | None,
+    ):
+        """Build the authoritative history payload for an auth cycle.
+
+        Handles three cases:
+        1. Reconnect restoring a writable Den window.
+        2. Reconnect restoring a read-only QQ window.
+        3. Fresh login / unknown platform / invalid CID → latest Den.
+
+        ``align_cid()`` is called at most once per invocation.
+        """
+        den_pid = self._core.config.get("id", "abyss_web")
+        aligned = self._UNSET  # track cached align_cid result
+
+        # 1. Resume a writable Den window.
+        if resume_conversation_id and resume_platform_id == den_pid:
+            result = self._core.load_conversation_history(
+                resume_conversation_id, den_pid,
+            )
+            if result is not None:
+                messages, actual_pid, title = result
+                await runtime.conversation_manager.switch_conversation(
+                    self._core.umo, resume_conversation_id,
+                )
+                return self._make_history_payload(
+                    messages=messages,
+                    conversation_id=resume_conversation_id,
+                    platform_id=actual_pid,
+                    title=title,
+                    readonly=False,
+                )
+            # CID deleted or forged — fall through to latest Den.
+
+        # 2. Resume a read-only QQ window.
+        if resume_conversation_id and resume_platform_id == "Abyss":
+            qq_result = self._core.load_conversation_history(
+                resume_conversation_id, "Abyss",
+            )
+
+            # Den pointer must still align regardless of QQ display target.
+            aligned, _ = await self._align_cid_once(aligned)
+
+            if qq_result is not None:
+                messages, actual_pid, title = qq_result
+                return self._make_history_payload(
+                    messages=messages,
+                    conversation_id=resume_conversation_id,
+                    platform_id=actual_pid,
+                    title=title,
+                    readonly=True,
+                )
+            # QQ CID invalid — fall through to latest Den.
+
+        # 3. Fresh login, unknown platform, or invalid resume target.
+        return await self._latest_den_auth_history(aligned_cid=aligned)
+
     # -- Navigation failure helper --------------------------------------------
 
     @staticmethod
