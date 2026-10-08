@@ -340,7 +340,19 @@ class FrontendAdapter(Platform):
             title = data.get("title", "")
             pid = data.get("platform_id", "")
             if cid and title is not None:
-                await self.conversations.handle_rename(ws, cid, title.strip(), pid)
+                clean_title = title.strip()
+                renamed = await self.conversations.handle_rename(
+                    ws, cid, clean_title, pid,
+                )
+                if renamed:
+                    try:
+                        self.bookmarks.update_conversation_title(
+                            pid, cid, clean_title,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            f"Failed to sync bookmark conversation title: {exc}"
+                        )
 
         elif kind == "delete_conversation":
             cid = data.get("conversation_id")

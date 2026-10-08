@@ -136,6 +136,25 @@ class BookmarkService:
     def _row_to_dict(row: sqlite3.Row) -> dict:
         return dict(row)
 
+    def update_conversation_title(
+        self,
+        platform_id: str,
+        conversation_id: str,
+        title: str,
+    ) -> int:
+        """Update the cached title on every bookmark from one conversation."""
+        conn = self._connect()
+        try:
+            with conn:
+                cursor = conn.execute(
+                    "UPDATE bookmarks SET conversation_title = ? "
+                    "WHERE platform_id = ? AND conversation_id = ?",
+                    (title, platform_id, conversation_id),
+                )
+            return cursor.rowcount
+        finally:
+            conn.close()
+
     # -- Source key computation ------------------------------------------------
 
     @staticmethod

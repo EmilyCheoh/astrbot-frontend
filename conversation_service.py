@@ -570,12 +570,18 @@ class ConversationService:
 
     # -- Rename / Delete -------------------------------------------------------
 
-    async def handle_rename(self, ws: web.WebSocketResponse, conversation_id: str, title: str, platform_id: str):
+    async def handle_rename(
+        self,
+        ws: web.WebSocketResponse,
+        conversation_id: str,
+        title: str,
+        platform_id: str,
+    ) -> bool:
         """Rename a conversation's title."""
         try:
             if not runtime.conversation_manager:
                 logger.warning("Conversation manager not available for rename")
-                return
+                return False
             umo = self._core.resolve_umo(platform_id)
             await runtime.conversation_manager.update_conversation(
                 umo, conversation_id, title=title,
@@ -585,8 +591,10 @@ class ConversationService:
                 "conversation_id": conversation_id,
                 "title": title,
             })
+            return True
         except Exception as exc:
             logger.warning(f"Failed to rename conversation: {exc}")
+            return False
 
     async def handle_delete(self, ws: web.WebSocketResponse, conversation_id: str, platform_id: str):
         """Delete a conversation permanently."""
