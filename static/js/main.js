@@ -346,7 +346,7 @@ function handleMessage(data) {
       break;
 
     case "assistant_message_patch_failed":
-      handleAssistantPatchFailure();
+      handleAssistantPatchFailure(data);
       break;
 
     case "user_message_patch_ready":

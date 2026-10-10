@@ -229,10 +229,12 @@ export function appendUser(text, { images = [], files = [], hasAttachment = fals
       assignBranchIndex(wrapper);
     }
 
-    // Action bar — skip Edit for attachment messages, skip Copy if no text
+    // Action bar — skip Edit for attachment/readonly, skip Copy if no text
     const actionList = [];
     if (!hasAttachment) {
-      actionList.push({ icon: ICON_EDIT, title: "Edit", onClick: () => handleEditClick(wrapper), className: "edit-btn" });
+      if (!state.isReadonly) {
+        actionList.push({ icon: ICON_EDIT, title: "Edit", onClick: () => handleEditClick(wrapper), className: "edit-btn" });
+      }
       actionList.push({ icon: ICON_PATCH, title: "Correct without reply", onClick: () => handleUserPatchClick(wrapper), className: "patch-btn" });
     }
     if (text) {
@@ -470,7 +472,7 @@ export function finalizePendingBotRow() {
     ...(branchable
       ? [{ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" }]
       : []),
-    ...(!userHasAttachment
+    ...(!userHasAttachment && !state.isReadonly
       ? [{ icon: ICON_RETRY, title: "Retry", onClick: () => handleRetryClick(row), className: "retry-btn" }]
       : []),
     ...(plainText && !hasToolCall
@@ -845,11 +847,7 @@ export function handleUserPatchReady(data) {
   if (
     data.conversation_id !== pendingUserPatch.conversationId
     || data.platform_id !== pendingUserPatch.platformId
-  ) {
-    if (pendingUserPatch.patchBtn) pendingUserPatch.patchBtn.disabled = false;
-    pendingUserPatch = null;
-    return;
-  }
+  ) return; // stale response — ignore without touching pending
 
   const { userRow } = pendingUserPatch;
   const msgDiv = userRow.querySelector(".msg-user");
@@ -970,15 +968,10 @@ export function handleUserPatchReady(data) {
 
 export function handleUserPatchSuccess(data) {
   if (!pendingUserPatch) return;
-
   if (
     data.conversation_id !== pendingUserPatch.conversationId
     || data.platform_id !== pendingUserPatch.platformId
-    || data.conversation_id !== state.currentConversationId
-  ) {
-    pendingUserPatch = null;
-    return;
-  }
+  ) return; // stale response — ignore without touching pending
 
   const { userRow, msgDiv, actionsBar, editArea } = pendingUserPatch;
   const rawText = data.raw_text || "";
@@ -1005,6 +998,10 @@ export function handleUserPatchSuccess(data) {
 
 export function handleUserPatchFailure(data) {
   if (!pendingUserPatch) return;
+  if (
+    data?.conversation_id !== pendingUserPatch.conversationId
+    || data?.platform_id !== pendingUserPatch.platformId
+  ) return; // stale response — ignore without touching pending
 
   if (pendingUserPatch.phase === "preparing") {
     if (pendingUserPatch.patchBtn) pendingUserPatch.patchBtn.disabled = false;
@@ -1084,11 +1081,7 @@ export function handleAssistantPatchReady(data) {
   if (
     data.conversation_id !== pendingAssistantPatch.conversationId
     || data.platform_id !== pendingAssistantPatch.platformId
-  ) {
-    if (pendingAssistantPatch.patchBtn) pendingAssistantPatch.patchBtn.disabled = false;
-    pendingAssistantPatch = null;
-    return;
-  }
+  ) return; // stale response — ignore without touching pending
 
   const { botRow } = pendingAssistantPatch;
   const wrapper = botRow.querySelector(".msg-bot");
@@ -1204,15 +1197,10 @@ export function handleAssistantPatchReady(data) {
 
 export function handleAssistantPatchSuccess(data) {
   if (!pendingAssistantPatch) return;
-
   if (
     data.conversation_id !== pendingAssistantPatch.conversationId
     || data.platform_id !== pendingAssistantPatch.platformId
-    || data.conversation_id !== state.currentConversationId
-  ) {
-    pendingAssistantPatch = null;
-    return;
-  }
+  ) return; // stale response — ignore without touching pending
 
   const { botRow, editArea, textBlocks, actionsBar } = pendingAssistantPatch;
 
@@ -1247,8 +1235,12 @@ export function handleAssistantPatchSuccess(data) {
   pendingAssistantPatch = null;
 }
 
-export function handleAssistantPatchFailure() {
+export function handleAssistantPatchFailure(data) {
   if (!pendingAssistantPatch) return;
+  if (
+    data?.conversation_id !== pendingAssistantPatch.conversationId
+    || data?.platform_id !== pendingAssistantPatch.platformId
+  ) return; // stale response — ignore without touching pending
 
   if (pendingAssistantPatch.phase === "preparing") {
     if (pendingAssistantPatch.patchBtn) pendingAssistantPatch.patchBtn.disabled = false;

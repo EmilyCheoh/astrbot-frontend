@@ -64,6 +64,10 @@ class ConversationService:
     def resolve_umo(self, platform_id: str) -> str:
         return self._core.resolve_umo(platform_id)
 
+    @property
+    def den_platform_id(self) -> str:
+        return self._core.config.get("id", "abyss_web")
+
     async def handle_branch(self, ws: web.WebSocketResponse, data: dict):
         await self._branches.handle_branch(ws, data)
 

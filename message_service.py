@@ -268,7 +268,7 @@ class MessageService:
         if not manager:
             return None
 
-        den_pid = self._conversations._core.config.get("id", "abyss_web")
+        den_pid = self._conversations.den_platform_id
         if requested_platform_id not in ("Abyss", den_pid):
             return None
 
