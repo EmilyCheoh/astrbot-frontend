@@ -1,3 +1,7 @@
+refactor message.js
+
+---
+
 允许小窝修改QQ消息
 
 ---

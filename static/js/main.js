@@ -16,10 +16,12 @@ import {
   appendBot, appendSystem, appendDenLog, appendDenCommandError,
   finalizePendingBotRow, renderHistory,
   scrollToBottom, setComposerReadonly, updateLastActions, initScrollButton,
+} from "./messages.js";
+import {
   handleAssistantPatchReady, handleAssistantPatchSuccess, handleAssistantPatchFailure,
   handleUserPatchReady, handleUserPatchSuccess, handleUserPatchFailure,
   resetPatchState, closeTopmostPatchLayer,
-} from "./messages.js";
+} from "./message_patch.js";
 import {
   sendMessage, initComposer, updateComposerAvailability,
   replaceComposerDraft,
