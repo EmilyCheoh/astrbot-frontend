@@ -362,12 +362,13 @@ class FrontendAdapter(Platform):
 
         elif kind == "prepare_user_message_patch":
             cid = data.get("conversation_id")
+            pid = data.get("platform_id", "")
             branch_index = data.get("branch_index")
             expected_role = data.get("expected_role", "")
             display_content = data.get("display_content", "")
             if cid and isinstance(branch_index, int) and display_content:
                 await self.messages.handle_prepare_user_message_patch(
-                    ws, cid, branch_index, expected_role, display_content,
+                    ws, cid, pid, branch_index, expected_role, display_content,
                 )
 
         elif kind == "save_user_message_patch":
@@ -375,12 +376,13 @@ class FrontendAdapter(Platform):
 
         elif kind == "prepare_assistant_message_patch":
             cid = data.get("conversation_id")
+            pid = data.get("platform_id", "")
             branch_index = data.get("branch_index")
             expected_role = data.get("expected_role", "")
             display_content = data.get("display_content", "")
             if cid and isinstance(branch_index, int):
                 await self.messages.handle_prepare_assistant_message_patch(
-                    ws, cid, branch_index, expected_role, display_content,
+                    ws, cid, pid, branch_index, expected_role, display_content,
                 )
 
         elif kind == "save_assistant_message_patch":
@@ -645,6 +647,7 @@ class FrontendAdapter(Platform):
                                     await ws.send_json({
                                         "type": etype,
                                         "conversation_id": data.get("conversation_id", ""),
+                                        "platform_id": data.get("platform_id", ""),
                                         "reason": "busy",
                                     })
                                 else:

@@ -161,7 +161,6 @@ export function scrollToBottom() {
 export function updateLastActions() {
   dom.messages.querySelectorAll(".msg-row-user.is-last, .msg-row-bot.is-last")
     .forEach((el) => el.classList.remove("is-last"));
-  if (state.isReadonly) return;
   // Exclude command and system rows — they have no action bars
   const users = dom.messages.querySelectorAll(".msg-row-user:not(.msg-row-command)");
   const bots = dom.messages.querySelectorAll(".msg-row-bot:not(.msg-row-system)");
@@ -567,7 +566,7 @@ export function renderHistory(messages) {
     if (!existing) {
       const divider = document.createElement("div");
       divider.className = "readonly-divider";
-      divider.innerHTML = "<span>QQ \u00B7 read only</span>";
+      divider.innerHTML = "<span>QQ \u00B7 history</span>";
       dom.messages.appendChild(divider);
     }
   }
@@ -729,8 +728,11 @@ let pendingPatchConfirm = null; // { row, bar }
 let pendingUserPatch = null;
 let pendingAssistantPatch = null;
 
-function canDispatchPatch() {
-  return isConnected() && !state.isProcessing && !state.isReadonly;
+function canPatchDisplayedConversation() {
+  if (!isConnected() || state.isProcessing) return false;
+  if (!state.currentConversationId) return false;
+  const pid = state.currentPlatformId;
+  return pid === "Abyss" || pid === "Abyss_Den";
 }
 
 function closePatchConfirmInner() {
@@ -790,7 +792,7 @@ function showPatchConfirm(row, role, branchIndex, displayText) {
 // ---- User message patch (no LLM re-fire) ----
 
 function handleUserPatchClick(userRow) {
-  if (state.isProcessing || state.isReadonly || !isConnected()) return;
+  if (!canPatchDisplayedConversation()) return;
   if (pendingUserPatch || pendingAssistantPatch) return;
 
   const branchIndex = Number(userRow.dataset.branchIndex);
@@ -809,15 +811,19 @@ function handleUserPatchClick(userRow) {
 }
 
 function startUserPatchPrepare(userRow, branchIndex, displayContent) {
-  if (!canDispatchPatch()) return;
+  if (!canPatchDisplayedConversation()) return;
   if (pendingUserPatch || pendingAssistantPatch) return;
 
   const patchBtn = userRow.querySelector(".patch-btn");
   if (patchBtn) patchBtn.disabled = true;
 
+  const cid = state.currentConversationId;
+  const pid = state.currentPlatformId;
+
   pendingUserPatch = {
     phase: "preparing",
-    conversationId: state.currentConversationId,
+    conversationId: cid,
+    platformId: pid,
     userRow,
     patchBtn,
     branchIndex,
@@ -826,7 +832,8 @@ function startUserPatchPrepare(userRow, branchIndex, displayContent) {
 
   send({
     type: "prepare_user_message_patch",
-    conversation_id: state.currentConversationId,
+    conversation_id: cid,
+    platform_id: pid,
     branch_index: branchIndex,
     expected_role: "user",
     display_content: displayContent,
@@ -835,7 +842,10 @@ function startUserPatchPrepare(userRow, branchIndex, displayContent) {
 
 export function handleUserPatchReady(data) {
   if (!pendingUserPatch || pendingUserPatch.phase !== "preparing") return;
-  if (data.conversation_id !== state.currentConversationId) {
+  if (
+    data.conversation_id !== pendingUserPatch.conversationId
+    || data.platform_id !== pendingUserPatch.platformId
+  ) {
     if (pendingUserPatch.patchBtn) pendingUserPatch.patchBtn.disabled = false;
     pendingUserPatch = null;
     return;
@@ -901,7 +911,7 @@ export function handleUserPatchReady(data) {
       return;
     }
 
-    if (!canDispatchPatch()) return;
+    if (!canPatchDisplayedConversation()) return;
 
     // Prevent patched message from becoming non-branch-eligible
     const visibleText = userPatchVisibleText(textarea.value);
@@ -922,7 +932,8 @@ export function handleUserPatchReady(data) {
 
     send({
       type: "save_user_message_patch",
-      conversation_id: state.currentConversationId,
+      conversation_id: pendingUserPatch.conversationId,
+      platform_id: pendingUserPatch.platformId,
       message_index: pendingUserPatch.messageIndex,
       block_index: pendingUserPatch.blockIndex,
       content_kind: pendingUserPatch.contentKind,
@@ -962,6 +973,7 @@ export function handleUserPatchSuccess(data) {
 
   if (
     data.conversation_id !== pendingUserPatch.conversationId
+    || data.platform_id !== pendingUserPatch.platformId
     || data.conversation_id !== state.currentConversationId
   ) {
     pendingUserPatch = null;
@@ -1022,7 +1034,7 @@ export function handleUserPatchFailure(data) {
 // ---- Assistant message patch (no LLM re-fire) ----
 
 function handleAssistantPatchClick(botRow) {
-  if (state.isProcessing || state.isReadonly || !isConnected()) return;
+  if (!canPatchDisplayedConversation()) return;
   if (pendingUserPatch || pendingAssistantPatch) return;
 
   const branchIndex = Number(botRow.dataset.branchIndex);
@@ -1038,15 +1050,19 @@ function handleAssistantPatchClick(botRow) {
 }
 
 function startAssistantPatchPrepare(botRow, branchIndex, displayText) {
-  if (!canDispatchPatch()) return;
+  if (!canPatchDisplayedConversation()) return;
   if (pendingUserPatch || pendingAssistantPatch) return;
 
   const patchBtn = botRow.querySelector(".patch-btn");
   if (patchBtn) patchBtn.disabled = true;
 
+  const cid = state.currentConversationId;
+  const pid = state.currentPlatformId;
+
   pendingAssistantPatch = {
     phase: "preparing",
-    conversationId: state.currentConversationId,
+    conversationId: cid,
+    platformId: pid,
     botRow,
     patchBtn,
     branchIndex,
@@ -1055,7 +1071,8 @@ function startAssistantPatchPrepare(botRow, branchIndex, displayText) {
 
   send({
     type: "prepare_assistant_message_patch",
-    conversation_id: state.currentConversationId,
+    conversation_id: cid,
+    platform_id: pid,
     branch_index: branchIndex,
     expected_role: "assistant",
     display_content: displayText,
@@ -1064,7 +1081,10 @@ function startAssistantPatchPrepare(botRow, branchIndex, displayText) {
 
 export function handleAssistantPatchReady(data) {
   if (!pendingAssistantPatch || pendingAssistantPatch.phase !== "preparing") return;
-  if (data.conversation_id !== state.currentConversationId) {
+  if (
+    data.conversation_id !== pendingAssistantPatch.conversationId
+    || data.platform_id !== pendingAssistantPatch.platformId
+  ) {
     if (pendingAssistantPatch.patchBtn) pendingAssistantPatch.patchBtn.disabled = false;
     pendingAssistantPatch = null;
     return;
@@ -1126,7 +1146,7 @@ export function handleAssistantPatchReady(data) {
   saveBtn.addEventListener("click", () => {
     const newText = textarea.value.trim();
     if (!newText) return;
-    if (!canDispatchPatch()) return;
+    if (!canPatchDisplayedConversation()) return;
 
     if (textarea.value === pendingAssistantPatch?.originalRawText) {
       closeBotPatchEditor();
@@ -1141,7 +1161,8 @@ export function handleAssistantPatchReady(data) {
 
     send({
       type: "save_assistant_message_patch",
-      conversation_id: state.currentConversationId,
+      conversation_id: pendingAssistantPatch.conversationId,
+      platform_id: pendingAssistantPatch.platformId,
       message_index: pendingAssistantPatch.messageIndex,
       raw_text: textarea.value,
       revision: pendingAssistantPatch.revision,
@@ -1186,6 +1207,7 @@ export function handleAssistantPatchSuccess(data) {
 
   if (
     data.conversation_id !== pendingAssistantPatch.conversationId
+    || data.platform_id !== pendingAssistantPatch.platformId
     || data.conversation_id !== state.currentConversationId
   ) {
     pendingAssistantPatch = null;

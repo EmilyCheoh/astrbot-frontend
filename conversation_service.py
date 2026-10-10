@@ -52,6 +52,18 @@ class ConversationService:
     def extract_branch_text(self, message: dict) -> str:
         return self._branches._extract_branch_text(message)
 
+    # -- Forwarded to core (used by MessageService for patch loading) -----------
+
+    def load_conversation_history(
+        self,
+        conversation_id: str,
+        platform_id: str,
+    ) -> tuple[list, str, str] | None:
+        return self._core.load_conversation_history(conversation_id, platform_id)
+
+    def resolve_umo(self, platform_id: str) -> str:
+        return self._core.resolve_umo(platform_id)
+
     async def handle_branch(self, ws: web.WebSocketResponse, data: dict):
         await self._branches.handle_branch(ws, data)
 
