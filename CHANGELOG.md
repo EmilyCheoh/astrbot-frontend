@@ -1,3 +1,7 @@
+小窝支持查看历史图片
+
+---
+
 refactor message.js
 
 ---
