@@ -33,8 +33,15 @@ class ConversationBranchService:
 
     @staticmethod
     def _extract_branch_text(message: dict) -> str:
-        """Extract visible text from a message, stripping timestamp tags."""
+        """Extract visible text from a message, stripping timestamp tags.
+
+        When the message contains at least one ``image_url`` block and the
+        only text is an auto-generated placeholder (``[图片]`` or
+        ``[Image]``), return an empty string so the message is not counted
+        as a branch point — matching the frontend's rendering logic.
+        """
         content = message.get("content", "")
+        has_image_url = False
 
         if isinstance(content, str):
             text = content
@@ -49,6 +56,9 @@ class ConversationBranchService:
                 block_type = block.get("type")
                 if block_type in ("thinking", "think"):
                     continue
+                if block_type == "image_url":
+                    has_image_url = True
+                    continue
                 if block_type == "text":
                     parts.append(
                         block.get("text")
@@ -59,7 +69,14 @@ class ConversationBranchService:
         else:
             text = ""
 
-        return _TIMESTAMP_TAG_RE.sub("", text).strip()
+        clean_text = _TIMESTAMP_TAG_RE.sub("", text).strip()
+
+        if has_image_url and re.fullmatch(
+            r"\[(?:图片|image)\]", clean_text, re.IGNORECASE
+        ):
+            return ""
+
+        return clean_text
 
     # -- Branch-point computation ----------------------------------------------
 

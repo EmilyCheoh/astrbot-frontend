@@ -43,6 +43,20 @@ function formatToolArgs(argsStr) {
   }
 }
 
+// ---- History image helpers ----
+
+function getImageUrl(block) {
+  if (!block || block.type !== "image_url") return "";
+  const value = block.image_url;
+  if (typeof value === "string") return value;
+  return typeof value?.url === "string" ? value.url : "";
+}
+
+function stripAutoImagePlaceholder(text, hasImage) {
+  if (!hasImage) return text;
+  return /^\s*\[(?:图片|image)\]\s*$/i.test(text) ? "" : text;
+}
+
 // Accumulates intermediate segments (thinking, tool calls) into
 // a single bot row until the final text segment arrives.
 let pendingBotRow = null;
@@ -506,6 +520,7 @@ export function renderHistory(messages) {
 
     let text = "";
     let thinkText = "";
+    let images = [];
 
     if (Array.isArray(msg.content)) {
       for (const block of msg.content) {
@@ -513,6 +528,9 @@ export function renderHistory(messages) {
           thinkText += (block.thinking || block.think || block.text || block.content || "") + "\n";
         } else if (block.type === "text") {
           text += block.text || block.content || "";
+        } else if (block.type === "image_url") {
+          const url = getImageUrl(block);
+          if (url) images.push(url);
         } else if (typeof block === "string") {
           text += block;
         } else {
@@ -526,7 +544,13 @@ export function renderHistory(messages) {
     text = text.replace(TIMESTAMP_TAG_RE, "").trim();
 
     if (role === "user") {
-      if (text) appendUser(text);
+      const visibleText = stripAutoImagePlaceholder(text, images.length > 0);
+      if (visibleText || images.length > 0) {
+        appendUser(visibleText, {
+          images,
+          hasAttachment: images.length > 0,
+        });
+      }
     } else if (role === "assistant") {
       const segments = [];
       if (thinkText.trim()) {
@@ -535,6 +559,10 @@ export function renderHistory(messages) {
 
       if (text) {
         segments.push({ type: "text", data: text });
+      }
+
+      for (const url of images) {
+        segments.push({ type: "image", data: url });
       }
 
       if (msg.tool_calls && msg.tool_calls.length > 0) {
