@@ -72,6 +72,10 @@ export const dom = {
   bookmarksLabelFilterBtn:  document.getElementById("bookmarks-label-filter-btn"),
   bookmarksLabelDropdown:   document.getElementById("bookmarks-label-dropdown"),
 
+  // -- Image lightbox --
+  imageLightbox:      document.getElementById("image-lightbox"),
+  lightboxImg:        document.getElementById("lightbox-img"),
+
   // -- Note popover --
   notePopover:            document.getElementById("note-popover"),
   notePopoverLabelPicker: document.getElementById("note-popover-label-picker"),

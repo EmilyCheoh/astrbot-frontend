@@ -49,6 +49,7 @@ import {
 } from "./bookmarks.js";
 import { initSelectionMenu, hideSelectionMenu } from "./selection_menu.js";
 import { initQuote } from "./quote.js";
+import { initImageViewer, isLightboxOpen, closeLightbox } from "./image_viewer.js";
 
 // ---- Header title helper ----
 
@@ -481,6 +482,10 @@ document.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
 
+  if (isLightboxOpen()) {
+    closeLightbox();
+    return;
+  }
   if (isFontSettingsOpen()) {
     closeFontSettings();
     return;
@@ -531,3 +536,4 @@ initHeaderMenu();
 initScrollButton();
 initSelectionMenu();
 initQuote();
+initImageViewer();

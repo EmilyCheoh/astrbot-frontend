@@ -2,6 +2,28 @@
    Den — Overlays (Search, Menus, Dialogs)
    ================================================================ */
 
+/* ---- Image lightbox ---- */
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: zoom-out;
+}
+
+.image-lightbox img {
+  max-width: 92vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: 6px;
+  cursor: default;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.4);
+}
+
+
 /* ---- Search overlay — floating modal with backdrop ---- */
 .search-overlay {
   position: fixed;

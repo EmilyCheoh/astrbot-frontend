@@ -138,6 +138,7 @@
   height: 48px;
   object-fit: cover;
   border-radius: 6px;
+  cursor: zoom-in;
 }
 
 .msg-attachment-files {
@@ -167,6 +168,7 @@
   max-width: 100%;
   border-radius: 8px;
   margin: 8px 0;
+  cursor: zoom-in;
 }
 
 .msg-bot audio {

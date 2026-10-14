@@ -17,6 +17,7 @@ import {
 // ---- Constants ----
 
 const TIMESTAMP_TAG_RE = /<(?:current_)?date_and_time>[\s\S]*?<\/(?:current_)?date_and_time>\s*$/;
+const IMAGE_ATTACHMENT_RE = /^\[Image Attachment(?:\s+in quoted message)?: path .+\]$/;
 
 const ICON_COPY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 const ICON_CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
@@ -536,7 +537,7 @@ export function renderHistory(messages) {
     const role = msg.role || "system";
     if (role === "tool" || role === "system") continue;
 
-    let text = "";
+    let textParts = [];
     let thinkText = "";
     let images = [];
 
@@ -545,21 +546,26 @@ export function renderHistory(messages) {
         if (block.type === "thinking" || block.type === "think") {
           thinkText += (block.thinking || block.think || block.text || block.content || "") + "\n";
         } else if (block.type === "text") {
-          text += block.text || block.content || "";
+          textParts.push(block.text || block.content || "");
         } else if (block.type === "image_url") {
           const url = getImageUrl(block);
           if (url) images.push(url);
         } else if (typeof block === "string") {
-          text += block;
+          textParts.push(block);
         } else {
-          text += block.text || block.content || JSON.stringify(block);
+          textParts.push(block.text || block.content || JSON.stringify(block));
         }
       }
     } else {
-      text = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+      textParts.push(typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content));
     }
 
-    text = text.replace(TIMESTAMP_TAG_RE, "").trim();
+    // Filter AstrBot internal image-path markers from user messages with images
+    if (role === "user" && images.length > 0) {
+      textParts = textParts.filter(t => !IMAGE_ATTACHMENT_RE.test(t.trim()));
+    }
+
+    let text = textParts.join("").replace(TIMESTAMP_TAG_RE, "").trim();
 
     if (role === "user") {
       const visibleText = stripAutoImagePlaceholder(text, images.length > 0);

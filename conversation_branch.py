@@ -22,6 +22,10 @@ _TIMESTAMP_TAG_RE = re.compile(
     r"</(?:current_)?date_and_time>\s*$"
 )
 
+_IMAGE_ATTACHMENT_RE = re.compile(
+    r"\[Image Attachment(?:\s+in quoted message)?: path .+\]"
+)
+
 
 class ConversationBranchService:
     """Branch creation and patch-target resolution."""
@@ -74,6 +78,15 @@ class ConversationBranchService:
                         or block.get("content")
                         or ""
                     )
+
+            # Filter AstrBot internal image-path markers for user
+            # image messages — must match the frontend per-block logic
+            if message.get("role") == "user" and has_image_url:
+                parts = [
+                    p for p in parts
+                    if not _IMAGE_ATTACHMENT_RE.fullmatch(p.strip())
+                ]
+
             text = "".join(parts)
         else:
             text = ""
