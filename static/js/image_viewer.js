@@ -30,6 +30,7 @@ export function initImageViewer() {
     const src = img.currentSrc || img.src;
     if (!src) return;
 
+    e.preventDefault();
     e.stopPropagation();
     dom.lightboxImg.src = src;
     dom.imageLightbox.classList.remove("hidden");
