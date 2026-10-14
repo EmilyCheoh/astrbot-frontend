@@ -219,7 +219,7 @@ class MessageService:
         # Edit: prepend 【重发】 so downstream worldbook/prompt logic
         # knows this is a re-submission, not a brand-new message.
         submit_content = content
-        if action == "edit":
+        if action in ("retry", "edit") and not content.startswith("【重发】"):
             submit_content = f"【重发】{content}"
 
         # Re-fire as a normal message through the standard pipeline
