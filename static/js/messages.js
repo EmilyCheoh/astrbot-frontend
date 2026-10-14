@@ -312,6 +312,24 @@ function appendSegment(wrapper, seg) {
       break;
     }
 
+    case "history_image": {
+      const placeholder = document.createElement("div");
+      placeholder.className = "history-image-placeholder";
+      placeholder.dataset.requestId = seg.requestId;
+      placeholder.textContent = "Loading image\u2026";
+      wrapper.appendChild(placeholder);
+
+      send({
+        type: "load_history_image",
+        request_id: seg.requestId,
+        conversation_id: seg.conversationId,
+        platform_id: seg.platformId,
+        tool_call_id: seg.toolCallId,
+        image_index: seg.imageIndex,
+      });
+      break;
+    }
+
     case "tool_call": {
       const tcDetails = document.createElement("details");
       tcDetails.className = "tool-call-block";
@@ -583,6 +601,37 @@ export function renderHistory(messages) {
             args: formatToolArgs(fn.arguments || ""),
             result: resultContent,
           });
+
+          // Detect images sent via send_message_to_user tool
+          if (
+            fn.name === "send_message_to_user"
+            && toolId
+            && resultContent.startsWith("Message sent to session")
+          ) {
+            let parsedArgs;
+            try {
+              parsedArgs = typeof fn.arguments === "string"
+                ? JSON.parse(fn.arguments)
+                : fn.arguments;
+            } catch { parsedArgs = null; }
+
+            if (parsedArgs && Array.isArray(parsedArgs.messages)) {
+              let imgIdx = 0;
+              for (const item of parsedArgs.messages) {
+                if (item && item.type === "image" && (item.path || item.url)) {
+                  segments.push({
+                    type: "history_image",
+                    requestId: `hist_img_${toolId}_${imgIdx}`,
+                    conversationId: state.currentConversationId,
+                    platformId: state.currentPlatformId,
+                    toolCallId: toolId,
+                    imageIndex: imgIdx,
+                  });
+                  imgIdx++;
+                }
+              }
+            }
+          }
         }
       }
       if (segments.length > 0) {

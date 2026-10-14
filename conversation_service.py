@@ -6,7 +6,11 @@ to ``ConversationSearchService``, while keeping history, navigation, list,
 favorites, and CRUD operations here.
 """
 
+import asyncio
+import base64
 import json
+import mimetypes
+import os
 import sqlite3
 from pathlib import Path
 
@@ -611,6 +615,189 @@ class ConversationService:
         except Exception as exc:
             logger.warning(f"Failed to rename conversation: {exc}")
             return False
+
+    # -- History image loading (tool-sent images) --------------------------------
+
+    _MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MiB
+
+    async def handle_load_history_image(
+        self, ws: web.WebSocketResponse, data: dict,
+    ) -> None:
+        """Validate parameters and spawn a background task to load a
+        tool-sent image from conversation history.
+
+        The actual I/O runs outside ``_dispatch_lock`` so it cannot
+        block conversation switching or new-client takeover.
+        """
+        request_id = data.get("request_id")
+        cid = data.get("conversation_id")
+        pid = data.get("platform_id")
+        tool_call_id = data.get("tool_call_id")
+        image_index = data.get("image_index")
+
+        if (
+            not request_id
+            or not cid
+            or not pid
+            or not tool_call_id
+            or not isinstance(image_index, int)
+        ):
+            return
+
+        den_pid = self._core.config.get("id", "abyss_web")
+        if pid not in (den_pid, "Abyss", "Abyss_Den"):
+            return
+
+        asyncio.create_task(
+            self._load_history_image_task(
+                ws, request_id, cid, pid, tool_call_id, image_index,
+            )
+        )
+
+    async def _load_history_image_task(
+        self,
+        ws: web.WebSocketResponse,
+        request_id: str,
+        cid: str,
+        pid: str,
+        tool_call_id: str,
+        image_index: int,
+    ) -> None:
+        """Background task: resolve a tool-sent image and return a
+        ``history_image_result`` over WebSocket.
+
+        All exceptions are caught internally so a failed image never
+        produces ``Task exception was never retrieved``.
+        """
+        try:
+            data_uri = self._resolve_tool_image(
+                cid, pid, tool_call_id, image_index,
+            )
+            payload: dict = {
+                "type": "history_image_result",
+                "request_id": request_id,
+                "conversation_id": cid,
+                "platform_id": pid,
+            }
+            if data_uri:
+                payload["status"] = "ok"
+                payload["data"] = data_uri
+            else:
+                payload["status"] = "unavailable"
+            await ws.send_json(payload)
+        except Exception:
+            # ws closed or any other failure — silently discard
+            try:
+                await ws.send_json({
+                    "type": "history_image_result",
+                    "request_id": request_id,
+                    "conversation_id": cid,
+                    "platform_id": pid,
+                    "status": "unavailable",
+                })
+            except Exception:
+                pass
+
+    def _resolve_tool_image(
+        self,
+        cid: str,
+        pid: str,
+        tool_call_id: str,
+        image_index: int,
+    ) -> str | None:
+        """Locate a tool-sent image in the authoritative conversation
+        history and return a data URI, or ``None`` if unavailable.
+        """
+        loaded = self._core.load_conversation_history(cid, pid)
+        if loaded is None:
+            return None
+
+        history, _, _ = loaded
+
+        # -- Find the assistant tool_call with matching ID -----------
+        target_tc = None
+        tc_msg_index = None
+        for i, msg in enumerate(history):
+            if not isinstance(msg, dict) or msg.get("role") != "assistant":
+                continue
+            for tc in msg.get("tool_calls", []):
+                if tc.get("id") != tool_call_id:
+                    continue
+                fn = tc.get("function", {})
+                if fn.get("name") == "send_message_to_user":
+                    target_tc = tc
+                    tc_msg_index = i
+                break
+            if target_tc is not None:
+                break
+
+        if target_tc is None:
+            return None
+
+        # -- Verify successful tool result --------------------------
+        result_ok = False
+        for j in range(tc_msg_index + 1, len(history)):
+            msg = history[j]
+            if (
+                isinstance(msg, dict)
+                and msg.get("role") == "tool"
+                and msg.get("tool_call_id") == tool_call_id
+            ):
+                content = msg.get("content", "")
+                if isinstance(content, str) and content.startswith(
+                    "Message sent to session"
+                ):
+                    result_ok = True
+                break
+
+        if not result_ok:
+            return None
+
+        # -- Parse arguments (JSON string or dict) ------------------
+        raw_args = target_tc.get("function", {}).get("arguments", "")
+        if isinstance(raw_args, str):
+            try:
+                args = json.loads(raw_args)
+            except (json.JSONDecodeError, ValueError):
+                return None
+        elif isinstance(raw_args, dict):
+            args = raw_args
+        else:
+            return None
+
+        # -- Find image at the requested index ----------------------
+        messages_list = args.get("messages", [])
+        if not isinstance(messages_list, list):
+            return None
+
+        image_items = [
+            m for m in messages_list
+            if isinstance(m, dict) and m.get("type") == "image"
+        ]
+
+        if image_index < 0 or image_index >= len(image_items):
+            return None
+
+        item = image_items[image_index]
+        path = item.get("path")
+        url = item.get("url")
+
+        # -- Local file path ----------------------------------------
+        if path and isinstance(path, str):
+            if not os.path.isfile(path):
+                return None
+            if os.path.getsize(path) > self._MAX_IMAGE_SIZE:
+                return None
+            mime = mimetypes.guess_type(path)[0] or "image/png"
+            with open(path, "rb") as fh:
+                encoded = base64.b64encode(fh.read()).decode("utf-8")
+            return f"data:{mime};base64,{encoded}"
+
+        # -- Remote URL (pass through directly) ---------------------
+        if url and isinstance(url, str) and url.startswith("http"):
+            return url
+
+        return None
 
     async def handle_delete(self, ws: web.WebSocketResponse, conversation_id: str, platform_id: str):
         """Delete a conversation permanently."""

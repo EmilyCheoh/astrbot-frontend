@@ -388,6 +388,10 @@ class FrontendAdapter(Platform):
         elif kind == "save_assistant_message_patch":
             await self.messages.handle_save_assistant_message_patch(ws, data)
 
+        # -- History image lazy loading (read-only, never frozen) ----
+        elif kind == "load_history_image":
+            await self.conversations.handle_load_history_image(ws, data)
+
         # -- Den local commands (non-turn, never frozen) -------------
         elif kind == "den_command":
             await self.logs.handle_command(ws, data)

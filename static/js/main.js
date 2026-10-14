@@ -376,6 +376,40 @@ function handleMessage(data) {
       handleBookmarkConnectionLost();
       break;
 
+    // -- History image lazy-load results --
+    case "history_image_result": {
+      // Discard if the user has navigated away from this conversation
+      if (
+        data.conversation_id !== state.currentConversationId
+        || data.platform_id !== state.currentPlatformId
+      ) {
+        break;
+      }
+      const placeholder = document.querySelector(
+        `.history-image-placeholder[data-request-id="${CSS.escape(data.request_id)}"]`
+      );
+      if (!placeholder) break;
+
+      if (data.status === "ok" && data.data) {
+        const img = document.createElement("img");
+        img.src = data.data;
+        img.onerror = () => {
+          const fail = document.createElement("div");
+          fail.className = "history-image-unavailable";
+          fail.textContent = "Image unavailable";
+          img.replaceWith(fail);
+        };
+        placeholder.replaceWith(img);
+      } else {
+        placeholder.textContent = "Image unavailable";
+        placeholder.classList.replace(
+          "history-image-placeholder",
+          "history-image-unavailable",
+        );
+      }
+      break;
+    }
+
     // -- Den local command responses --
     case "den_log":
       appendDenLog(data.content || "No log entries found.");

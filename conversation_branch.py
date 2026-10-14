@@ -57,7 +57,16 @@ class ConversationBranchService:
                 if block_type in ("thinking", "think"):
                     continue
                 if block_type == "image_url":
-                    has_image_url = True
+                    image_data = block.get("image_url")
+                    image_url = (
+                        image_data
+                        if isinstance(image_data, str)
+                        else image_data.get("url")
+                        if isinstance(image_data, dict)
+                        else ""
+                    )
+                    if isinstance(image_url, str) and image_url:
+                        has_image_url = True
                     continue
                 if block_type == "text":
                     parts.append(
@@ -71,8 +80,10 @@ class ConversationBranchService:
 
         clean_text = _TIMESTAMP_TAG_RE.sub("", text).strip()
 
-        if has_image_url and re.fullmatch(
-            r"\[(?:图片|image)\]", clean_text, re.IGNORECASE
+        if (
+            message.get("role") == "user"
+            and has_image_url
+            and re.fullmatch(r"\[(?:图片|image)\]", clean_text, re.IGNORECASE)
         ):
             return ""
 
