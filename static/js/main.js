@@ -278,6 +278,18 @@ function handleMessage(data) {
       if (state.activeAnchorId === data.conversation_id) {
         state.activeAnchorId = null;
       }
+
+      // Stop succeeded, but the history refresh failed — unlock the composer.
+      if (
+        state.stopPending &&
+        state.stopAcknowledged &&
+        data.conversation_id === state.currentConversationId
+      ) {
+        state.stopPending = false;
+        state.stopAcknowledged = false;
+        updateComposerAvailability();
+      }
+
       renderSidebar();
       break;
 
