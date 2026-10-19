@@ -61,6 +61,22 @@ function updateHeaderTitle(title) {
 
 // ---- Message dispatch (called by socket.js on every WS message) ----
 
+function refreshAfterStop() {
+  const conversationId = state.currentConversationId;
+
+  if (!conversationId) {
+    state.stopPending = false;
+    state.stopAcknowledged = false;
+    updateComposerAvailability();
+    return;
+  }
+
+  send({
+    type: "view_history",
+    conversation_id: conversationId,
+  });
+}
+
 function handleMessage(data) {
   switch (data.type) {
     case "auth_ok":
@@ -154,15 +170,21 @@ function handleMessage(data) {
           dom.thinkingIndicator.classList.add("hidden");
         }
       }
-      updateComposerAvailability();
+      if (!state.isProcessing && state.stopAcknowledged) {
+        refreshAfterStop();
+      } else {
+        updateComposerAvailability();
+      }
       break;
 
     case "stop_ack":
-      // Stop confirmed — clear pending and show arrow while old
-      // tasks drain their idles.
-      state.stopPending = false;
       state.stopAcknowledged = true;
-      updateComposerAvailability();
+
+      if (!state.isProcessing) {
+        refreshAfterStop();
+      } else {
+        updateComposerAvailability();
+      }
       break;
 
     case "stop_failed":
@@ -195,6 +217,8 @@ function handleMessage(data) {
     }
 
     case "history": {
+      state.stopPending = false;
+      state.stopAcknowledged = false;
       state.isProcessing = false;
       state.isBranching = false;
       dom.thinkingIndicator.classList.add("hidden");
