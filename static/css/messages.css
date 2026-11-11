@@ -73,6 +73,92 @@
   font-style: italic;
 }
 
+/* ---- GitHub-style Markdown callouts ---- */
+.msg-bot .md-callout {
+  --callout-color: #2563b8;
+  --callout-bg: rgba(37, 99, 184, 0.065);
+  --callout-border: rgba(37, 99, 184, 0.22);
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--callout-border);
+  border-left: 3px solid var(--callout-color);
+  border-radius: 10px;
+  background: var(--callout-bg);
+  color: var(--text-primary);
+  font-style: normal;
+  overflow-wrap: anywhere;
+}
+
+.msg-bot .md-callout--tip {
+  --callout-color: #19805a;
+  --callout-bg: rgba(25, 128, 90, 0.065);
+  --callout-border: rgba(25, 128, 90, 0.22);
+}
+
+.msg-bot .md-callout--important {
+  --callout-color: #8558bb;
+  --callout-bg: rgba(133, 88, 187, 0.065);
+  --callout-border: rgba(133, 88, 187, 0.22);
+}
+
+.msg-bot .md-callout--warning {
+  --callout-color: #a36d18;
+  --callout-bg: rgba(163, 109, 24, 0.075);
+  --callout-border: rgba(163, 109, 24, 0.25);
+}
+
+.msg-bot .md-callout--caution {
+  --callout-color: #bd4853;
+  --callout-bg: rgba(189, 72, 83, 0.065);
+  --callout-border: rgba(189, 72, 83, 0.22);
+}
+
+[data-theme="dark"] .msg-bot .md-callout {
+  --callout-color: #79b8ff;
+  --callout-bg: rgba(121, 184, 255, 0.08);
+  --callout-border: rgba(121, 184, 255, 0.22);
+}
+
+[data-theme="dark"] .msg-bot .md-callout--tip {
+  --callout-color: #62c997;
+  --callout-bg: rgba(98, 201, 151, 0.08);
+  --callout-border: rgba(98, 201, 151, 0.22);
+}
+
+[data-theme="dark"] .msg-bot .md-callout--important {
+  --callout-color: #c5a0fa;
+  --callout-bg: rgba(197, 160, 250, 0.08);
+  --callout-border: rgba(197, 160, 250, 0.22);
+}
+
+[data-theme="dark"] .msg-bot .md-callout--warning {
+  --callout-color: #f2c46d;
+  --callout-bg: rgba(242, 196, 109, 0.08);
+  --callout-border: rgba(242, 196, 109, 0.24);
+}
+
+[data-theme="dark"] .msg-bot .md-callout--caution {
+  --callout-color: #fa8e98;
+  --callout-bg: rgba(250, 142, 152, 0.08);
+  --callout-border: rgba(250, 142, 152, 0.22);
+}
+
+.msg-bot .md-callout-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.9em;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--callout-color);
+}
+
+.msg-bot .md-callout-icon { flex: 0 0 18px; }
+.msg-bot .md-callout-content > :last-child { margin-bottom: 0; }
+.msg-bot .md-callout-content > :first-child { margin-top: 0; }
+
 /* ---- Code ---- */
 .msg-bot code {
   font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
