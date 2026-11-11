@@ -113,7 +113,12 @@ class FrontendAdapter(Platform):
     # -- Required overrides --------------------------------------------------
 
     def meta(self) -> PlatformMetadata:
-        return PlatformMetadata("abyss_web", "A&F Web Frontend", self.config.get("id", "abyss_web"))
+        return PlatformMetadata(
+            "abyss_web",
+            "A&F Web Frontend",
+            self.config.get("id", "abyss_web"),
+            support_streaming_message=False,
+        )
 
     @property
     def _umo(self) -> str:
