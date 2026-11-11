@@ -5,6 +5,7 @@ and JSON-serialisable segments. Some functions perform filesystem I/O
 (reading media files, writing temp files).
 """
 
+import asyncio
 import base64
 import mimetypes
 import os
@@ -12,13 +13,16 @@ import uuid
 from pathlib import Path
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Node, Plain, Image, Record
+from astrbot.api.message_components import File, Node, Plain, Image, Record
 from astrbot import logger
+
+_FILE_BUDGET = 8 * 1024 * 1024  # 8 MiB cumulative raw bytes per message chain
 
 
 async def chain_to_segments(message_chain: MessageChain) -> list[dict]:
     """Convert a MessageChain into JSON-serialisable segments."""
     segments: list[dict] = []
+    total_file_bytes = 0
     for comp in message_chain.chain:
         if isinstance(comp, Plain):
             text = comp.text
@@ -32,6 +36,38 @@ async def chain_to_segments(message_chain: MessageChain) -> list[dict]:
             uri = await media_to_data_uri(comp)
             if uri:
                 segments.append({"type": "audio", "data": uri})
+        elif isinstance(comp, File):
+            name = Path(comp.name or "attachment.bin").name
+            try:
+                path = await comp.get_file()
+                if not path or not os.path.isfile(path):
+                    raise FileNotFoundError("File not found")
+
+                size = os.path.getsize(path)
+                if total_file_bytes + size > _FILE_BUDGET:
+                    raise ValueError(
+                        f"Cumulative file size would exceed "
+                        f"{_FILE_BUDGET // (1024 * 1024)} MiB budget"
+                    )
+
+                raw = await asyncio.to_thread(Path(path).read_bytes)
+                total_file_bytes += len(raw)
+
+                mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
+                encoded = base64.b64encode(raw).decode("ascii")
+
+                segments.append({
+                    "type": "file",
+                    "name": name,
+                    "size": len(raw),
+                    "data": f"data:{mime};base64,{encoded}",
+                })
+            except Exception as exc:
+                logger.warning("Den file conversion failed for %s: %s", name, exc)
+                segments.append({
+                    "type": "text",
+                    "data": f"\u26a0\ufe0f \u65e0\u6cd5\u53d1\u9001\u6587\u4ef6 {name}\u3002",
+                })
         elif isinstance(comp, Node):
             # CoT / tool-call forwarded-message nodes
             texts = []

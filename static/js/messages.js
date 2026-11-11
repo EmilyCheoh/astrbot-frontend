@@ -360,6 +360,70 @@ function appendSegment(wrapper, seg) {
       wrapper.appendChild(tcDetails);
       break;
     }
+
+    case "file": {
+      const card = document.createElement("div");
+      card.className = "msg-file-card";
+
+      const info = document.createElement("div");
+      info.className = "msg-file-card-info";
+
+      const nameEl = document.createElement("span");
+      nameEl.className = "msg-file-card-name";
+      nameEl.textContent = seg.name || "attachment.bin";
+
+      const sizeEl = document.createElement("small");
+      sizeEl.className = "msg-file-card-size";
+      if (seg.size != null) {
+        if (seg.size < 1024) {
+          sizeEl.textContent = seg.size + " B";
+        } else if (seg.size < 1024 * 1024) {
+          sizeEl.textContent = (seg.size / 1024).toFixed(1) + " KB";
+        } else {
+          sizeEl.textContent = (seg.size / (1024 * 1024)).toFixed(1) + " MB";
+        }
+      }
+
+      info.append(nameEl, sizeEl);
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "msg-file-card-download";
+      btn.textContent = "\u2193";
+      btn.title = "Download";
+
+      btn.addEventListener("click", () => {
+        let url;
+        try {
+          const [header, encoded] = seg.data.split(",", 2);
+          if (!header?.includes(";base64") || !encoded) {
+            throw new Error("Invalid file data");
+          }
+          const mime = header.slice(5).split(";")[0]
+            || "application/octet-stream";
+          const binary = atob(encoded);
+          const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+          const blob = new Blob([bytes], { type: mime });
+          url = URL.createObjectURL(blob);
+
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = (seg.name || "attachment.bin")
+            .split(/[\\/]/).pop() || "attachment.bin";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (err) {
+          if (url) URL.revokeObjectURL(url);
+          console.error("File download failed:", err);
+        }
+      });
+
+      card.append(info, btn);
+      wrapper.appendChild(card);
+      break;
+    }
   }
 }
 
