@@ -417,6 +417,7 @@ function appendSegment(wrapper, seg) {
         } catch (err) {
           if (url) URL.revokeObjectURL(url);
           console.error("File download failed:", err);
+          sizeEl.textContent = "⚠️ Download failed. Click ↓ to retry.";
         }
       });
 
@@ -555,7 +556,8 @@ export function finalizePendingBotRow() {
       ? [{ icon: ICON_COPY, title: "Copy", onClick: (e) => copyText(row.dataset.text || "", e.currentTarget) }]
       : []),
     ...(plainText
-      ? [{ icon: ICON_STAR, title: "Bookmark", onClick: (e) => {
+      ? [{
+        icon: ICON_STAR, title: "Bookmark", onClick: (e) => {
           const btn = e.currentTarget;
           const draft = {
             platformId: state.currentPlatformId,
@@ -568,7 +570,8 @@ export function finalizePendingBotRow() {
             context: findPreviousUserText(row),
           };
           openNotePopover(draft, btn, btn);
-        }, className: "star-btn" }]
+        }, className: "star-btn"
+      }]
       : []),
     ...(branchable
       ? [{ icon: ICON_BRANCH, title: "Branch in new conversation", onClick: () => handleBranchClick(row, "assistant"), className: "branch-btn" }]
