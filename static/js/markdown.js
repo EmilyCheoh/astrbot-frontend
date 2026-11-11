@@ -45,7 +45,7 @@ function installCalloutRenderer() {
         if (!match) return false; // Keep the default renderer for normal quotes.
 
         const kind = match[1].toLowerCase();
-        const title = escapeHtml(match[2]?.trim() || CALLOUT_LABELS[kind]);
+        const title = marked.parseInline(match[2]?.trim() || CALLOUT_LABELS[kind], { gfm: true });
         const body = source.slice(match[0].length);
         const content = body ? marked.parse(body, { breaks: true, gfm: true }) : "";
         const icon = `<svg class="md-callout-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CALLOUT_ICONS[kind]}</svg>`;
