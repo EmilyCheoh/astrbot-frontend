@@ -113,6 +113,13 @@
   --callout-border: rgba(189, 72, 83, 0.22);
 }
 
+
+.msg-bot .md-callout--love {
+  --callout-color: #c65a87;
+  --callout-bg: rgba(198, 90, 135, 0.075);
+  --callout-border: rgba(198, 90, 135, 0.27);
+}
+
 [data-theme="dark"] .msg-bot .md-callout {
   --callout-color: #79b8ff;
   --callout-bg: rgba(121, 184, 255, 0.08);
@@ -141,6 +148,13 @@
   --callout-color: #fa8e98;
   --callout-bg: rgba(250, 142, 152, 0.08);
   --callout-border: rgba(250, 142, 152, 0.22);
+}
+
+
+[data-theme="dark"] .msg-bot .md-callout--love {
+  --callout-color: #f2a0c0;
+  --callout-bg: rgba(242, 160, 192, 0.08);
+  --callout-border: rgba(242, 160, 192, 0.25);
 }
 
 .msg-bot .md-callout-title {

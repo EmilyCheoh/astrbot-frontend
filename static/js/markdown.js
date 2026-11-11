@@ -7,7 +7,7 @@
 
 // GitHub-style Markdown Callouts, with optional custom titles.
 // Only blockquotes are inspected, so fenced code blocks stay unchanged.
-const CALLOUT_PATTERN = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:[ \t]+([^\r\n]*))?(?:\r?\n|$)/i;
+const CALLOUT_PATTERN = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|LOVE)\](?:[ \t]+([^\r\n]*))?(?:\r?\n|$)/i;
 
 const CALLOUT_LABELS = {
   note: "Note",
@@ -15,6 +15,7 @@ const CALLOUT_LABELS = {
   important: "Important",
   warning: "Warning",
   caution: "Caution",
+  love: "Love",
 };
 
 const CALLOUT_ICONS = {
@@ -23,6 +24,7 @@ const CALLOUT_ICONS = {
   important: '<path d="M12 3 3 8v8l9 5 9-5V8l-9-5Z"/><path d="M12 8v5m0 3h.01"/>',
   warning: '<path d="m10.3 4.3-8.2 14a2 2 0 0 0 1.7 3h16.4a2 2 0 0 0 1.7-3l-8.2-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/>',
   caution: '<path d="M8 3h8l5 5v8l-5 5H8l-5-5V8l5-5Z"/><path d="M12 8v5m0 4h.01"/>',
+  love: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/>',
 };
 
 let calloutRendererInstalledOn = null;
