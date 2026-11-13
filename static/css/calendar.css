@@ -1,0 +1,105 @@
+/* Den calendar notes — presentation only; no POST state or interactions. */
+.msg-bot .calendar-card {
+  width: 100%;
+  max-width: 510px;
+  box-sizing: border-box;
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.msg-bot .calendar-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.msg-bot .calendar-card-date {
+  flex: 0 0 74px;
+  min-height: 89px;
+  box-sizing: border-box;
+  padding: 10px 5px;
+  border-radius: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  background: #e7eff5;
+  color: #455c70;
+}
+
+.msg-bot .calendar-card-month,
+.msg-bot .calendar-card-weekday {
+  font-size: 10px;
+  line-height: 1.4;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+}
+
+.msg-bot .calendar-card-day {
+  font-size: 29px;
+  line-height: 1.18;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+}
+
+.msg-bot .calendar-card-body {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.msg-bot .calendar-card-title {
+  margin-bottom: 8px;
+  font-size: 17px;
+  line-height: 1.35;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.msg-bot .calendar-card-detail {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 5px;
+  color: var(--text-supporting);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.msg-bot .calendar-card-detail-icon {
+  flex: 0 0 17px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Emoji", sans-serif;
+  font-size: 13px;
+  text-align: center;
+}
+
+.msg-bot .calendar-card-description {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-supporting);
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+
+[data-theme="dark"] .msg-bot .calendar-card-date {
+  background: #293747;
+  color: #bed5e9;
+}
+
+@media (max-width: 450px) {
+  .msg-bot .calendar-card { padding: 12px; }
+  .msg-bot .calendar-card-main { gap: 12px; }
+  .msg-bot .calendar-card-date { flex-basis: 64px; min-height: 82px; }
+  .msg-bot .calendar-card-title { font-size: 16px; }
+}
