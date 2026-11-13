@@ -56,18 +56,11 @@ class FrontendEvent(AstrMessageEvent):
         """Determine whether this send belongs to the LLM or the system.
 
         Priority:
-        0. Calendar POST receipt explicitly marked by its plugin → ``"system"``
         1. Segments contain reasoning/tool_call → ``"llm"``
         2. MessageChain.type is a known assistant structure → ``"llm"``
         3. Event result is LLM_RESULT → ``"llm"``
         4. Everything else → ``"system"``
         """
-        # Automatic calendar receipts arrive on an LLM event, but are plugin
-        # notifications, not part of that LLM's response. Use the existing
-        # system-message path (appendSystem) without a new WebSocket type.
-        if self.get_extra("_noir_calendar_system_notification"):
-            return "system"
-
         if any(s.get("type") in ("reasoning", "tool_call") for s in segments):
             return "llm"
 
