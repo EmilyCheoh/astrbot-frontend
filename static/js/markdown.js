@@ -81,13 +81,16 @@ function renderPlainMarkdown(text) {
 export function renderMarkdown(text) {
   if (!text) return "";
 
-  // Match the server's literal-brace thoughts protocol. Only an
-  // opening marker at the beginning (apart from whitespace) counts.
-  const open = "{thoughts}";
-  const close = "{/thoughts}";
+  // Support both thoughts and recursion_trace.
+  const markers = {
+    "{thoughts}": "{/thoughts}",
+    "{recursion_trace}": "{/recursion_trace}",
+  };
   const start = text.length - text.trimStart().length;
-  if (!text.startsWith(open, start)) return renderPlainMarkdown(text);
+  const open = Object.keys(markers).find(marker => text.startsWith(marker, start));
+  if (!open) return renderPlainMarkdown(text);
 
+  const close = markers[open];
   const end = text.indexOf(close, start + open.length);
   if (end < 0) return renderPlainMarkdown(text); // Incomplete: show original.
 
