@@ -1,105 +1,227 @@
-/* Den calendar notes — presentation only; no POST state or interactions. */
+/* Den — calendar cards: a warm, little paper-planner look.
+   Presentation only; the {calendar} parser and event data stay untouched. */
+
 .msg-bot .calendar-card {
+  --calendar-paper: #fffaf5;
+  --calendar-paper-end: #fff3eb;
+  --calendar-ink: #4b342d;
+  --calendar-muted: #8d7064;
+  --calendar-border: #ecd8c8;
+  --calendar-accent: #c98673;
+  --calendar-date-top: #f4d4c5;
+  --calendar-date-paper: #fff8f0;
+  --calendar-date-border: #e7c9b9;
+  --calendar-ring: #c58d7b;
+  --calendar-pill: #f8e5dc;
+  --calendar-divider: #ead8ca;
+
+  position: relative;
   width: 100%;
   max-width: 510px;
   box-sizing: border-box;
-  margin: 12px 0;
-  padding: 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 18px;
-  background: var(--bg-card);
-  color: var(--text-primary);
+  margin: 12px auto;
+  padding: 19px 20px 17px 18px;
+  border: 1px solid var(--calendar-border);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(242, 196, 174, 0.22), transparent 45%),
+    linear-gradient(145deg, var(--calendar-paper), var(--calendar-paper-end));
+  box-shadow: 0 5px 19px rgba(118, 73, 52, 0.065);
+  color: var(--calendar-ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
 
+/* A tiny bit of stationery decoration, without taking any content space. */
+.msg-bot .calendar-card::after {
+  content: "✿";
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  color: var(--calendar-accent);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
 .msg-bot .calendar-card-main {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 17px;
 }
 
+/* A miniature desk calendar with two little binding holes. */
 .msg-bot .calendar-card-date {
-  flex: 0 0 74px;
-  min-height: 89px;
+  position: relative;
+  flex: 0 0 79px;
+  min-height: 105px;
   box-sizing: border-box;
-  padding: 10px 5px;
+  padding: 13px 6px 9px;
+  border: 1px solid var(--calendar-date-border);
   border-radius: 13px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 1px;
-  background: #e7eff5;
-  color: #455c70;
+  background: linear-gradient(to bottom,
+      var(--calendar-date-top) 0,
+      var(--calendar-date-top) 29px,
+      var(--calendar-date-paper) 29px,
+      var(--calendar-date-paper) 100%);
+  box-shadow: 0 2px 5px rgba(112, 69, 52, 0.06);
+  color: var(--calendar-ink);
 }
 
-.msg-bot .calendar-card-month,
-.msg-bot .calendar-card-weekday {
+.msg-bot .calendar-card-date::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background:
+    radial-gradient(circle at 26% 50%, var(--calendar-ring) 2.2px, transparent 2.6px),
+    radial-gradient(circle at 74% 50%, var(--calendar-ring) 2.2px, transparent 2.6px);
+  opacity: 0.8;
+}
+
+.msg-bot .calendar-card-month {
+  margin-top: 2px;
+  color: #865747;
   font-size: 10px;
-  line-height: 1.4;
-  font-weight: 650;
-  letter-spacing: 0.09em;
+  line-height: 1.5;
+  font-weight: 750;
+  letter-spacing: 0.12em;
 }
 
 .msg-bot .calendar-card-day {
-  font-size: 29px;
-  line-height: 1.18;
+  margin-top: 5px;
+  color: var(--calendar-ink);
+  font-size: 33px;
+  line-height: 1.05;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.045em;
+}
+
+.msg-bot .calendar-card-weekday {
+  margin-top: 3px;
+  color: var(--calendar-muted);
+  font-size: 10px;
+  line-height: 1.4;
+  font-weight: 650;
+  letter-spacing: 0.08em;
 }
 
 .msg-bot .calendar-card-body {
   flex: 1;
   min-width: 0;
-  padding: 2px 0;
+  padding: 4px 8px 0 0;
 }
 
 .msg-bot .calendar-card-title {
-  margin-bottom: 8px;
+  margin-bottom: 11px;
+  color: var(--calendar-ink);
   font-size: 17px;
-  line-height: 1.35;
-  font-weight: 650;
-  color: var(--text-primary);
+  line-height: 1.4;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
 .msg-bot .calendar-card-detail {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin-top: 5px;
-  color: var(--text-supporting);
+  margin-top: 7px;
+  color: var(--calendar-muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* The time is a soft label; location and recurrence remain plain and light. */
+.msg-bot .calendar-card-title+.calendar-card-detail {
+  display: inline-flex;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 0;
+  padding: 5px 11px 5px 8px;
+  border-radius: 999px;
+  background: var(--calendar-pill);
+  color: var(--calendar-ink);
+  font-size: 12.5px;
+  font-weight: 550;
 }
 
 .msg-bot .calendar-card-detail-icon {
   flex: 0 0 17px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Emoji", sans-serif;
   font-size: 13px;
+  line-height: 1.5;
   text-align: center;
 }
 
 .msg-bot .calendar-card-description {
-  margin-top: 14px;
+  margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid var(--border-subtle);
-  color: var(--text-supporting);
+  border-top: 1px dashed var(--calendar-divider);
+  color: var(--calendar-muted);
   white-space: pre-wrap;
   font-size: 13px;
+  line-height: 1.65;
 }
 
-[data-theme="dark"] .msg-bot .calendar-card-date {
-  background: #293747;
-  color: #bed5e9;
+[data-theme="dark"] .msg-bot .calendar-card {
+  --calendar-paper: #352a26;
+  --calendar-paper-end: #302521;
+  --calendar-ink: #f4e8dd;
+  --calendar-muted: #d3b6a8;
+  --calendar-border: #62483e;
+  --calendar-accent: #e6a58d;
+  --calendar-date-top: #7e5147;
+  --calendar-date-paper: #49352e;
+  --calendar-date-border: #815b4e;
+  --calendar-ring: #e4b2a0;
+  --calendar-pill: #604139;
+  --calendar-divider: #725247;
+  box-shadow: 0 5px 19px rgba(0, 0, 0, 0.13);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(184, 114, 91, 0.12), transparent 45%),
+    linear-gradient(145deg, var(--calendar-paper), var(--calendar-paper-end));
+}
+
+[data-theme="dark"] .msg-bot .calendar-card-month {
+  color: #ffe1cf;
 }
 
 @media (max-width: 450px) {
-  .msg-bot .calendar-card { padding: 12px; }
-  .msg-bot .calendar-card-main { gap: 12px; }
-  .msg-bot .calendar-card-date { flex-basis: 64px; min-height: 82px; }
-  .msg-bot .calendar-card-title { font-size: 16px; }
+  .msg-bot .calendar-card {
+    padding: 15px 14px 14px;
+    border-radius: 19px;
+  }
+
+  .msg-bot .calendar-card-main {
+    gap: 12px;
+  }
+
+  .msg-bot .calendar-card-date {
+    flex-basis: 70px;
+    min-height: 97px;
+    padding: 12px 4px 7px;
+  }
+
+  .msg-bot .calendar-card-day {
+    font-size: 30px;
+  }
+
+  .msg-bot .calendar-card-title {
+    font-size: 16px;
+  }
+
+  .msg-bot .calendar-card-body {
+    padding-right: 5px;
+  }
 }
